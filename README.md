@@ -1,6 +1,6 @@
-# COPE
+# Practical Network Coding with ESP32
 
-This is the repository for COPE, a protocol utilising opportunistic network coding to improve throughput in wireless (mesh) networks. This implementation is written in C++ and targets the ESP32 chipset.
+This is the repository for `COPE`, a protocol utilising opportunistic network coding to improve throughput in wireless (mesh) networks. This implementation is written in C++ and targets the ESP32 chipset.
 
 ## Building
 
