@@ -1,0 +1,29 @@
+default:
+  # NOTE: This is a private image, it requires the DOCKER_AUTH_CONFIG CI variable to be set.
+  image: localghost345/esp-idf:1.0
+
+build-job:
+  script:
+    - source $HOME/.profile
+    - get_idf
+    - idf.py --preview set-target esp32s3
+    - idf.py clean build
+
+  artifacts:
+    paths:
+      - "build"
+
+test-job:
+  script:
+    - source $HOME/.profile
+    - get_idf
+    - cd test || exit
+    - idf.py --preview set-target linux
+    - idf.py clean build
+    - test_output=$(./build/test_runner.elf)
+    - echo "$test_output"
+    - n_failures=$(echo "$test_output" | grep -c ":FAIL")
+    - >
+      if (( n_failures > 0 )); then
+        exit 1
+      fi
