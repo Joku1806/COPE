@@ -14,6 +14,6 @@ WORKDIR /home/idftester/esp-idf
 RUN ./install.sh esp32s3
 
 WORKDIR /home/idftester
-RUN printf "shopt -s expand_aliases\nalias get_idf='. $HOME/esp-idf/export.sh'" >> .profile
+ENV IDF_PATH="/home/idftester/esp-idf"
 
 CMD /bin/bash
