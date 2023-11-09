@@ -1,3 +1,8 @@
+#![feature(custom_test_frameworks)]
+#![test_runner(test_runner::run)]
+
+mod test_runner;
+
 use esp_idf_svc::espnow::{EspNow, PeerInfo, BROADCAST};
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition, wifi::EspWifi};
@@ -36,5 +41,28 @@ fn main() {
 
         println!("Sent broadcast message no. {}!", broadcast_counter);
         sleep(Duration::new(2, 0));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Error;
+
+    #[test_case]
+    fn it_works() -> Result<(), Error> {
+        let result = 2 + 2;
+
+        anyhow::ensure!(result == 4);
+
+        return Ok(());
+    }
+
+    #[test_case]
+    fn it_doesnt_work() -> Result<(), Error> {
+        let result = 2 + 6;
+
+        anyhow::ensure!(result == 4, "result should be equal to {}", 4);
+
+        return Ok(());
     }
 }
