@@ -10,4 +10,8 @@ build-job:
     paths:
       - "target/xtensa-esp32s3-espidf/debug/cope"
 
+test-job:
+    script:
+        - source /home/esp/export-esp.sh
+        - Meta/run_tests.sh /dev/ttyACM0
 # FIXME: Figure out how to run tests on host with Rust
