@@ -1,3 +1,8 @@
+.embuild
 .vscode
 build
 simulator/target
+Cargo.lock
+target
+sdkconfig*
+!./sdkconfig.defaults

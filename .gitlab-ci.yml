@@ -1,0 +1,13 @@
+default:
+  image: espressif/idf-rust:esp32s3_1.73.0.1
+
+build-job:
+  script:
+    - source /home/esp/export-esp.sh
+    - cargo build
+
+  artifacts:
+    paths:
+      - "target/xtensa-esp32s3-espidf/debug/cope"
+
+# FIXME: Figure out how to run tests on host with Rust
