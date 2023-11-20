@@ -1,72 +1,61 @@
 use std::collections::HashMap;
-use crate::esp::Packet;
 use std::sync::mpsc::channel;
 use std::thread::sleep;
+use std::time::Duration;
 
-mod esp;
-mod firewall;
-mod node;
+use cope::Node;
+use simulator_channel::SimulatorChannel;
+mod simulator_channel;
 
 fn main() {
-    // init simulator
     let (tx, rx) = channel();
     let mut node_channels = HashMap::new();
 
-
-    // init new node 111111
     let (node_tx, node_rx) = channel();
-    let node_mac = [1,1,1,1,1,1];
-    node_channels.insert(node_mac, node_tx);
-    let esp = esp::ESP::new(node_rx, tx.clone(), node_mac);
-    let node = node::Node::new(
-        firewall::Firewall::new(esp), [127, 0, 0, 1] ,
+    node_channels.insert('A', node_tx);
+    let node: Node = Node::new(
+        'A',
+        'C',
+        Vec::from(['B']),
+        // NOTE: Grrrr heap allocations.
+        // I could not get this to work using lifetimes,
+        // Apparently you should not store references in structs.
+        // But this should not be a problem on the ESP,
+        // we have enough heap space for this.
+        Box::new(SimulatorChannel::new(node_rx, tx.clone())),
     );
 
-    // create new thread
-    std::thread::spawn(move || {
-        loop {
-            node.send(Packet::from_string("Hello World"));
-            println!("[NODE]  send Hello World");
-            while let Some(data) = node.recv() {
-                println!("[NODE]  Received {:?}", String::from_utf8_lossy(&data));
-            }
-            // sleep
-            sleep(std::time::Duration::from_secs(1));
-        }
+    std::thread::spawn(move || loop {
+        node.tick();
+        sleep(Duration::from_secs(1));
     });
-    // init other node 2:2:2:2:2:2
-    let (node_tx, node_rx) = channel();
-    let node_mac = [2,2,2,2,2,2];
-    node_channels.insert(node_mac, node_tx);
 
-    let node = node::Node::new(
-        firewall::Firewall::new(esp::ESP::new(node_rx, tx, node_mac)),
-        [127, 0, 0, 1],
+    let (node_tx, node_rx) = channel();
+    node_channels.insert('B', node_tx);
+    let node: Node = Node::new(
+        'B',
+        'C',
+        Vec::from(['A']),
+        Box::new(SimulatorChannel::new(node_rx, tx.clone())),
     );
 
-    // create new thread
-    std::thread::spawn(move || {
-        loop {
-            while let Some(data) = node.recv() {
-                println!("[NODE2] Received {:?}", String::from_utf8_lossy(&data));
-                node.send(Packet::from_string("00000000 RESPONSE"));
-                println!("[NODE2] 00000000 RESPONSE");
-            }
-            // sleep
-            sleep(std::time::Duration::from_millis(10));
-        }
+    std::thread::spawn(move || loop {
+        node.tick();
+        sleep(Duration::from_millis(500));
     });
 
-    // networking loop
     loop {
-        if let Ok(data) = rx.try_recv() {
-            //println!("[SIM] Received {:?} forwarding ...", data);
-            // todo do not send packet back to sender
-            for (mac, node) in node_channels.iter() {
-                if *mac == data.origin {
+        if let Ok(packet) = rx.try_recv() {
+            let origin = packet.origin;
+
+            for (id, node_tx) in node_channels.iter() {
+                if *id == origin {
                     continue;
                 }
-                node.send(data.clone()).unwrap();
+
+                // NOTE: Because the simulator channel is implemented using a multi-producer, single-consumer queue,
+                // we have to forward the packet to each node individually.
+                node_tx.send(packet.clone()).unwrap();
             }
         }
     }
