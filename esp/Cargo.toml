@@ -1,5 +1,5 @@
 [package]
-name = "cope"
+name = "cope-esp"
 version = "0.1.0"
 authors = ["Jonas Kuß <jonas.kuss@tu-berlin.de>"]
 edition = "2021"
