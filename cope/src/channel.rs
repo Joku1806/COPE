@@ -1,6 +1,6 @@
 use crate::packet::Packet;
 
-pub trait Channel: Send + Sync {
+pub trait Channel {
     fn transmit(&self, packet: &Packet);
-    fn receive(&self) -> Option<Packet>;
+    fn receive(&mut self) -> Option<Packet>;
 }

@@ -19,6 +19,13 @@ impl Packet {
         }
     }
 
+    pub fn from_bytes(data: &[u8]) -> Self {
+        Packet {
+            data: data.to_vec(),
+            origin: '*',
+        }
+    }
+
     pub fn set_sender(&mut self, id: NodeID) {
         self.origin = id;
     }

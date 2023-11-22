@@ -13,7 +13,7 @@ fn main() {
 
     let (node_tx, node_rx) = channel();
     node_channels.insert('A', node_tx);
-    let node: Node = Node::new(
+    let mut node: Node = Node::new(
         'A',
         'C',
         Vec::from(['B']),
@@ -32,7 +32,7 @@ fn main() {
 
     let (node_tx, node_rx) = channel();
     node_channels.insert('B', node_tx);
-    let node: Node = Node::new(
+    let mut node: Node = Node::new(
         'B',
         'C',
         Vec::from(['A']),

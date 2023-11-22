@@ -7,7 +7,7 @@ use crate::traffic_generator::TrafficGenerator;
 pub struct Node {
     id: NodeID,
     topology: Topology,
-    channel: Box<dyn Channel>,
+    channel: Box<dyn Channel + Send>,
     generator: TrafficGenerator,
 }
 
@@ -16,7 +16,8 @@ impl Node {
         id: NodeID,
         relay: NodeID,
         allowlist: Vec<NodeID>,
-        channel: Box<dyn Channel>,
+        // NOTE: Send is required for sharing between threads in simulator
+        channel: Box<dyn Channel + Send>,
     ) -> Self {
         Node {
             id,
@@ -26,7 +27,7 @@ impl Node {
         }
     }
 
-    pub fn tick(&self) {
+    pub fn tick(&mut self) {
         if let Some(packet) = self.channel.receive() {
             println!("Node {}: Received packet {:?}", self.id, packet);
 
