@@ -19,6 +19,7 @@ pub struct EspChannel<'a> {
 
 impl EspChannel<'_> {
     pub fn new() -> Self {
+        // TODO: Figure out how to move this to initialize()
         let peripherals = Peripherals::take().unwrap();
         let sys_loop = EspSystemEventLoop::take().unwrap();
         let nvs = EspDefaultNvsPartition::take().unwrap();
@@ -47,6 +48,13 @@ impl EspChannel<'_> {
                     .push_back(Packet::deserialize_from(bytes).unwrap());
             })
             .unwrap();
+
+        unsafe {
+            // NOTE: We need to be in promiscuous mode to overhear unicast packets
+            // not addressed to us.
+            // TODO: Error handling?
+            esp_idf_svc::sys::esp_wifi_set_promiscuous(true);
+        }
     }
 
     fn is_unicast_peer_added(&self, peer: &MacAddress) -> bool {
