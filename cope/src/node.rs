@@ -37,7 +37,7 @@ impl Node {
         }
 
         if let Some(mut packet) = self.generator.generate() {
-            packet.origin = self.id;
+            packet.set_sender(self.id);
             println!("Node {}: Sending packet {:?}", self.id, packet);
             self.channel.transmit(&packet);
         }

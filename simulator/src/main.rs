@@ -46,10 +46,10 @@ fn main() {
 
     loop {
         if let Ok(packet) = rx.try_recv() {
-            let origin = packet.origin;
+            let sender = packet.get_sender();
 
             for (id, node_tx) in node_channels.iter() {
-                if *id == origin {
+                if *id == sender {
                     continue;
                 }
 

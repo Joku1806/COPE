@@ -43,7 +43,8 @@ impl EspChannel<'_> {
         // I just compared with the definition of esp_now_recv_cb_t
         self.espnow_driver
             .register_recv_cb(|_info: &[u8], bytes: &[u8]| {
-                self.received_packets.push_back(Packet::from_bytes(bytes));
+                self.received_packets
+                    .push_back(Packet::deserialize_from(bytes).unwrap());
             })
             .unwrap();
     }
@@ -66,7 +67,7 @@ impl EspChannel<'_> {
 
 impl Channel for EspChannel<'_> {
     fn transmit(&self, packet: &Packet) {
-        if let Some(mac) = self.mac_map.get(&packet.origin) {
+        if let Some(mac) = self.mac_map.get(&packet.get_sender()) {
             if !self.is_unicast_peer_added(mac) {
                 self.add_unicast_peer(mac);
             }

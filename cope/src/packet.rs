@@ -1,32 +1,70 @@
-use crate::topology::NodeID;
+use bincode::Error;
+use bitvec::prelude as bv;
+use serde::{Deserialize, Serialize};
+use std::vec::Vec;
 
-#[derive(Debug, Clone)]
+// TODO: NodeID should be moved to a different file,
+// once we create one. Maybe protocol.rs?
+pub type NodeID = char;
+pub type PacketID = u16;
 
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+struct CodingInfo {
+    packet_hash: u32,
+    nexthop: NodeID,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+struct ReceptionReport {
+    source: NodeID,
+    last_id: PacketID,
+    preceding_ids: bv::BitVec,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Default, Clone)]
 pub struct Packet {
-    pub data: Vec<u8>,
-    pub origin: NodeID,
+    id: PacketID,
+    sender: NodeID,
+    receiver: NodeID,
+    // NOTE: These could also be HashMaps for easy access.
+    // But I am not sure if/when this is needed,
+    // so lets stay close to the definition in the paper.
+    coding_header: Vec<CodingInfo>,
+    reception_header: Vec<ReceptionReport>,
+    data: Vec<u8>,
 }
 
 impl Packet {
-    pub fn new(data: Vec<u8>) -> Self {
-        Packet { data, origin: '*' }
+    pub fn new(id: PacketID, sender: NodeID, receiver: NodeID) -> Packet {
+        let mut p: Packet = Packet::default();
+
+        p.id = id;
+        p.sender = sender;
+        p.receiver = receiver;
+        p.coding_header = Vec::<CodingInfo>::new();
+        p.reception_header = Vec::<ReceptionReport>::new();
+        p.data = Vec::<u8>::new();
+
+        return p;
     }
 
-    pub fn from_string(data: &str) -> Self {
-        Packet {
-            data: data.as_bytes().to_vec(),
-            origin: '*',
-        }
+    pub fn empty() -> Packet {
+        return Packet::default();
     }
 
-    pub fn from_bytes(data: &[u8]) -> Self {
-        Packet {
-            data: data.to_vec(),
-            origin: '*',
-        }
+    pub fn deserialize_from(bytes: &[u8]) -> Result<Packet, Error> {
+        bincode::deserialize(bytes)
     }
 
-    pub fn set_sender(&mut self, id: NodeID) {
-        self.origin = id;
+    pub fn serialize_into(&self) -> Result<Vec<u8>, Error> {
+        bincode::serialize(self)
+    }
+
+    pub fn set_sender(&mut self, sender: NodeID) {
+        self.sender = sender;
+    }
+
+    pub fn get_sender(&self) -> NodeID {
+        self.sender
     }
 }

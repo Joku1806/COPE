@@ -9,6 +9,6 @@ impl TrafficGenerator {
     }
 
     pub fn generate(&self) -> Option<Packet> {
-        return Some(Packet::from_string("Example"));
+        return Some(Packet::empty());
     }
 }

@@ -17,7 +17,7 @@ fn main() {
     channel.initialize();
     let mut node = Node::new('A', 'B', Vec::from(['B']), Box::new(channel));
 
-    let mut packet_id: PacketID = 0;
+    let mut broadcast_counter: u32 = 0;
     loop {
         broadcast_counter += 1;
         node.tick();
