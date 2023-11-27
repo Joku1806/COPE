@@ -10,10 +10,6 @@ pub struct Topology {
 
 impl Topology {
     pub fn new(own_id: NodeID, relay: NodeID, allowlist: Vec<NodeID>) -> Topology {
-        // FIXME: Exactly how do we pass each node its own ID?
-        // There is one global config, so this will be a problem.
-        // We also can't use MAC addresses for this. the protocol
-        // should not make any assumptions about the running platform.
         return Topology {
             own_id,
             relay,

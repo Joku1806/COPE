@@ -4,6 +4,7 @@
 mod esp_channel;
 mod test_runner;
 
+use cope::traffic_generator::greedy_generator::GreedyGenerator;
 use cope::Node;
 use std::{thread::sleep, time::Duration};
 
@@ -15,7 +16,14 @@ fn main() {
 
     let mut channel = EspChannel::new();
     channel.initialize();
-    let mut node = Node::new('A', 'B', Vec::from(['B']), Box::new(channel));
+    let traffic_generator = GreedyGenerator::new();
+    let mut node = Node::new(
+        'A',
+        'B',
+        Vec::from(['B']),
+        Box::new(channel),
+        Box::new(traffic_generator),
+    );
 
     let mut broadcast_counter: u32 = 0;
     loop {

@@ -1,4 +1,4 @@
-use cope::channel::Channel;
+use cope::channel::{Channel, ChannelError};
 use cope::packet::Packet;
 use std::sync::mpsc::{Receiver, Sender};
 
@@ -17,9 +17,11 @@ impl SimulatorChannel {
 }
 
 impl Channel for SimulatorChannel {
-    fn transmit(&self, packet: &Packet) {
+    fn transmit(&self, packet: &Packet) -> Result<(), ChannelError> {
         // FIXME: Figure out how to send without cloning
         self.tx.send(packet.clone()).unwrap();
+
+        Ok(())
     }
 
     fn receive(&mut self) -> Option<Packet> {
