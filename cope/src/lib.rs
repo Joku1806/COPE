@@ -1,4 +1,5 @@
 pub mod channel;
+pub mod config;
 pub mod node;
 pub mod packet;
 pub mod topology;
