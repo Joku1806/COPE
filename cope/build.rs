@@ -1,4 +1,4 @@
-use cope_config::config::Config;
+use cope_config::config::TmpConfig;
 use cope_config::config::MacAdress;
 use cope_config::config::NodeID;
 use cope_config::file_generator::generate;

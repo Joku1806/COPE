@@ -4,7 +4,7 @@ use std::fmt::Display;
 
 // A char that has to be an uppercase letter
 #[derive(Copy, Clone,Debug)]
-pub struct NodeID(char);
+pub struct NodeID(pub char);
 impl NodeID {
     pub fn new(value: char) -> Self {
         if value.is_uppercase() {
@@ -12,6 +12,7 @@ impl NodeID {
         }
         Self(value)
     }
+
     pub fn from_string(str: &String) -> Self {
         assert_eq!(1, str.len());
         let c: char = str.chars().next().unwrap();
@@ -28,7 +29,7 @@ impl Display for NodeID {
 
 
 #[derive(Debug)]
-pub struct MacAdress([u8; 6]);
+pub struct MacAdress(pub [u8; 6]);
 impl MacAdress {
     pub fn new(array: [u8; 6]) -> Self {
         Self(array)
@@ -52,18 +53,17 @@ impl IntoIterator for &MacAdress{
     }
 }
 
+trait ConfigMethods { }
+
 #[derive(Debug)]
-pub struct Config {
+pub struct TmpConfig {
     node_count: usize,
     nodes: Vec<(NodeID, MacAdress)>,
     relay: NodeID,
     black_list: Vec<(NodeID, Vec<NodeID>)>,
 }
 
-// impl Default for Config {
-// }
-
-impl Config {
+impl TmpConfig {
     pub fn new(
         nodes: Vec<(NodeID, MacAdress)>,
         relay: NodeID,
@@ -81,3 +81,33 @@ impl Config {
     pub fn nodes(&self) -> &Vec<(NodeID, MacAdress)> { &self.nodes }
     pub fn relay(&self) -> NodeID { self.relay }
 }
+
+impl ConfigMethods for TmpConfig {}
+
+struct Config<const N: usize> {
+    nodes: [(NodeID, MacAdress); N],
+    relay: NodeID,
+    black_list: [(NodeID, [Option<NodeID>; N]); N],
+}
+
+const CONFIG: Config<3> = Config {
+    nodes: [
+        (NodeID('A'), MacAdress([0,0,0,0,0,0])),
+        (NodeID('B'), MacAdress([0,0,0,0,0,0])),
+        (NodeID('C'), MacAdress([0,0,0,0,0,0])),
+    ],
+    relay: NodeID('B'),
+    black_list: [
+        (NodeID('A'), [
+            Some(NodeID('C')), None, None,
+        ]),
+        (NodeID('B'), [
+            None, None, None,
+        ]),
+        (NodeID('C'), [
+            Some(NodeID('A')), None, None,
+        ]),
+    ],
+};
+
+impl<const N: usize> ConfigMethods for Config<N> { }
