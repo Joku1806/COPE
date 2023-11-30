@@ -4,17 +4,48 @@
 mod esp_channel;
 mod test_runner;
 
+use std::time::Duration;
+
 use cope::traffic_generator::poisson_generator::PoissonGenerator;
 use cope::Node;
-use std::{thread::sleep, time::Duration};
+use esp_idf_svc::{
+    eventloop::EspSystemEventLoop,
+    hal::{
+        cpu::Core,
+        peripherals::Peripherals,
+        task::watchdog::{TWDTConfig, TWDTDriver},
+    },
+    nvs::EspDefaultNvsPartition,
+    wifi::EspWifi,
+};
 
 use byte_unit::{Byte, Unit};
+use enumset::enum_set;
 
 use crate::esp_channel::EspChannel;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     esp_idf_svc::sys::link_patches();
     println!("Hello espnow!");
+
+    // TODO: Move all this init stuff to a separate function
+    let peripherals = Peripherals::take().unwrap();
+    let sys_loop = EspSystemEventLoop::take().unwrap();
+    let nvs = EspDefaultNvsPartition::take().unwrap();
+
+    // TODO: Better error handling
+    let mut wifi_driver = EspWifi::new(peripherals.modem, sys_loop, Some(nvs)).unwrap();
+    wifi_driver.start().unwrap();
+
+    let watchdog_config = TWDTConfig {
+        duration: Duration::from_secs(2),
+        panic_on_trigger: true,
+        // NOTE: Make sure that the IDLE task always runs on this core!
+        // The watchdog example uses Core::Core0 instead.
+        subscribed_idle_tasks: enum_set!(Core::Core1),
+    };
+    let mut driver = TWDTDriver::new(peripherals.twdt, &watchdog_config)?;
+    let mut watchdog = driver.watch_current_task()?;
 
     let mut channel = EspChannel::new();
     channel.initialize();
@@ -30,6 +61,7 @@ fn main() {
 
     loop {
         node.tick();
+        let _ = watchdog.feed();
     }
 }
 

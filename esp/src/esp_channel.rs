@@ -1,8 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
 use esp_idf_svc::espnow::{EspNow, PeerInfo};
-use esp_idf_svc::hal::peripherals::Peripherals;
-use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition, wifi::EspWifi};
 
 use cope::channel::{Channel, ChannelError};
 use cope::packet::Packet;
@@ -19,14 +17,6 @@ pub struct EspChannel<'a> {
 
 impl EspChannel<'_> {
     pub fn new() -> Self {
-        // TODO: Figure out how to move this to initialize()
-        let peripherals = Peripherals::take().unwrap();
-        let sys_loop = EspSystemEventLoop::take().unwrap();
-        let nvs = EspDefaultNvsPartition::take().unwrap();
-
-        // TODO: Better error handling
-        let mut wifi_driver = EspWifi::new(peripherals.modem, sys_loop, Some(nvs)).unwrap();
-        wifi_driver.start().unwrap();
         let espnow_driver = EspNow::take().unwrap();
 
         return EspChannel {
