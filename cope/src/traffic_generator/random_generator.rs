@@ -1,4 +1,4 @@
-use crate::packet::Packet;
+use crate::packet::{Packet, PacketID};
 use crate::traffic_generator::TrafficGenerator;
 
 use rand::prelude::*;
@@ -10,6 +10,7 @@ pub struct RandomGenerator {
     // NOTE: The target network throughput in bytes
     generation_rate: f32,
     rng: rand::rngs::ThreadRng,
+    current_packet_id: PacketID,
 }
 
 // TODO: way to set packet size
@@ -19,6 +20,7 @@ impl RandomGenerator {
             generation_timestamp: SystemTime::now(),
             generation_rate,
             rng: rand::thread_rng(),
+            current_packet_id: 0,
         }
     }
 }
@@ -35,6 +37,11 @@ impl TrafficGenerator for RandomGenerator {
         let elapsed = self.generation_timestamp.elapsed().unwrap();
         let target_size = (self.generation_rate * elapsed.as_secs_f32()).floor();
         self.generation_timestamp = SystemTime::now();
-        return Some(Packet::with_serialized_size(target_size as usize).unwrap());
+
+        let mut p = Packet::with_serialized_size(target_size as usize).unwrap();
+        p.set_id(self.current_packet_id);
+        self.current_packet_id += 1;
+
+        return Some(p);
     }
 }

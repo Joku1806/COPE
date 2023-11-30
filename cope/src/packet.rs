@@ -86,4 +86,8 @@ impl Packet {
     pub fn get_sender(&self) -> NodeID {
         self.sender
     }
+
+    pub fn set_id(&mut self, id: PacketID) {
+        self.id = id;
+    }
 }

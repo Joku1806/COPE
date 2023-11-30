@@ -1,4 +1,4 @@
-use crate::packet::Packet;
+use crate::packet::{Packet, PacketID};
 use crate::traffic_generator::TrafficGenerator;
 
 use rand::prelude::*;
@@ -12,6 +12,7 @@ pub struct PoissonGenerator {
     // NOTE: The target network throughput in bytes
     generation_rate: f32,
     distribution: rand_distr::Poisson<f32>,
+    current_packet_id: PacketID,
 }
 
 // TODO: way to set packet size
@@ -21,6 +22,7 @@ impl PoissonGenerator {
             generation_timestamp: SystemTime::now(),
             generation_rate: generation_rate as f32,
             distribution: rand_distr::Poisson::new(generation_rate as f32).unwrap(),
+            current_packet_id: 0,
         }
     }
 }
@@ -40,6 +42,10 @@ impl TrafficGenerator for PoissonGenerator {
         self.generation_timestamp +=
             Duration::from_secs_f32(PACKET_SIZE as f32 / self.generation_rate);
         // TODO: Better error handling
-        return Some(Packet::with_serialized_size(PACKET_SIZE).unwrap());
+        let mut p = Packet::with_serialized_size(PACKET_SIZE).unwrap();
+        p.set_id(self.current_packet_id);
+        self.current_packet_id += 1;
+
+        return Some(p);
     }
 }
