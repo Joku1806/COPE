@@ -28,12 +28,8 @@ fn main() {
         Box::new(traffic_generator),
     );
 
-    let mut broadcast_counter: u32 = 0;
     loop {
-        broadcast_counter += 1;
         node.tick();
-        println!("Sent broadcast message no. {}!", broadcast_counter);
-        sleep(Duration::new(1, 0));
     }
 }
 
