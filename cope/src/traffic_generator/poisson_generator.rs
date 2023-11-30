@@ -16,11 +16,11 @@ pub struct PoissonGenerator {
 
 // TODO: way to set packet size
 impl PoissonGenerator {
-    pub fn new(generation_rate: f32) -> Self {
+    pub fn new(generation_rate: u32) -> Self {
         PoissonGenerator {
             generation_timestamp: SystemTime::now(),
-            generation_rate,
-            distribution: rand_distr::Poisson::new(generation_rate).unwrap(),
+            generation_rate: generation_rate as f32,
+            distribution: rand_distr::Poisson::new(generation_rate as f32).unwrap(),
         }
     }
 }

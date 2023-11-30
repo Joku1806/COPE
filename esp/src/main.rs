@@ -4,9 +4,11 @@
 mod esp_channel;
 mod test_runner;
 
-use cope::traffic_generator::greedy_generator::GreedyGenerator;
+use cope::traffic_generator::poisson_generator::PoissonGenerator;
 use cope::Node;
 use std::{thread::sleep, time::Duration};
+
+use byte_unit::{Byte, Unit};
 
 use crate::esp_channel::EspChannel;
 
@@ -16,7 +18,8 @@ fn main() {
 
     let mut channel = EspChannel::new();
     channel.initialize();
-    let traffic_generator = GreedyGenerator::new();
+    let traffic_generator =
+        PoissonGenerator::new(Byte::from_u64_with_unit(2, Unit::KB).unwrap().as_u64() as u32);
     let mut node = Node::new(
         'A',
         'B',
