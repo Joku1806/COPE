@@ -1,10 +1,8 @@
 use std::collections::{HashMap, VecDeque};
 
 use esp_idf_svc::espnow::{EspNow, PeerInfo};
-use esp_idf_svc::hal::peripherals::Peripherals;
-use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition, wifi::EspWifi};
 
-use cope::channel::Channel;
+use cope::channel::{Channel, ChannelError};
 use cope::packet::Packet;
 use cope::topology::NodeID;
 
@@ -19,14 +17,6 @@ pub struct EspChannel<'a> {
 
 impl EspChannel<'_> {
     pub fn new() -> Self {
-        // TODO: Figure out how to move this to initialize()
-        let peripherals = Peripherals::take().unwrap();
-        let sys_loop = EspSystemEventLoop::take().unwrap();
-        let nvs = EspDefaultNvsPartition::take().unwrap();
-
-        // TODO: Better error handling
-        let mut wifi_driver = EspWifi::new(peripherals.modem, sys_loop, Some(nvs)).unwrap();
-        wifi_driver.start().unwrap();
         let espnow_driver = EspNow::take().unwrap();
 
         return EspChannel {
@@ -74,17 +64,25 @@ impl EspChannel<'_> {
 }
 
 impl Channel for EspChannel<'_> {
-    fn transmit(&self, packet: &Packet) {
+    fn transmit(&self, packet: &Packet) -> Result<(), ChannelError> {
         if let Some(mac) = self.mac_map.get(&packet.get_sender()) {
             if !self.is_unicast_peer_added(mac) {
                 self.add_unicast_peer(mac);
             }
 
-            // TODO: actually send packet
-            self.espnow_driver
-                .send(*mac, "Placeholder".as_bytes())
-                .unwrap();
+            let serialized = packet.serialize_into().unwrap();
+            // NOTE: How does backoff and ACKs work?
+            // Does it happen automatically or do we have to write code for it?
+            let result = self.espnow_driver.send(*mac, serialized.as_slice());
+
+            return match result {
+                Ok(_) => Ok(()),
+                // FIXME: Figure out which esp_err_t codes map to our errors
+                Err(_) => Err(ChannelError::NoACK),
+            };
         }
+
+        Ok(())
     }
 
     fn receive(&mut self) -> Option<Packet> {

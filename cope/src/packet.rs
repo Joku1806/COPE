@@ -8,6 +8,11 @@ use std::vec::Vec;
 pub type NodeID = char;
 pub type PacketID = u16;
 
+#[derive(Debug)]
+pub enum PacketError {
+    InvalidSize,
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 struct CodingInfo {
     packet_hash: u32,
@@ -52,6 +57,20 @@ impl Packet {
         return Packet::default();
     }
 
+    pub fn with_serialized_size(size: usize) -> Result<Packet, PacketError> {
+        let mut packet = Packet::default();
+
+        let Ok(base_size) = bincode::serialized_size(&packet) else {
+            return Err(PacketError::InvalidSize);
+        };
+        let Some(rest_size) = size.checked_sub(base_size as usize) else {
+            return Err(PacketError::InvalidSize);
+        };
+
+        packet.data = vec![0; rest_size];
+        Ok(packet)
+    }
+
     pub fn deserialize_from(bytes: &[u8]) -> Result<Packet, Error> {
         bincode::deserialize(bytes)
     }
@@ -66,5 +85,9 @@ impl Packet {
 
     pub fn get_sender(&self) -> NodeID {
         self.sender
+    }
+
+    pub fn set_id(&mut self, id: PacketID) {
+        self.id = id;
     }
 }

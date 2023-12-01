@@ -3,6 +3,7 @@ use std::sync::mpsc::channel;
 use std::thread::sleep;
 use std::time::Duration;
 
+use cope::traffic_generator::greedy_generator::GreedyGenerator;
 use cope::Node;
 use simulator_channel::SimulatorChannel;
 mod simulator_channel;
@@ -23,11 +24,12 @@ fn main() {
         // But this should not be a problem on the ESP,
         // we have enough heap space for this.
         Box::new(SimulatorChannel::new(node_rx, tx.clone())),
+        Box::new(GreedyGenerator::new()),
     );
 
     std::thread::spawn(move || loop {
         node.tick();
-        sleep(Duration::from_secs(1));
+        sleep(Duration::from_millis(1000));
     });
 
     let (node_tx, node_rx) = channel();
@@ -37,11 +39,12 @@ fn main() {
         'C',
         Vec::from(['A']),
         Box::new(SimulatorChannel::new(node_rx, tx.clone())),
+        Box::new(GreedyGenerator::new()),
     );
 
     std::thread::spawn(move || loop {
         node.tick();
-        sleep(Duration::from_millis(500));
+        sleep(Duration::from_millis(1000));
     });
 
     loop {

@@ -8,7 +8,7 @@ pub struct Node {
     id: NodeID,
     topology: Topology,
     channel: Box<dyn Channel + Send>,
-    generator: TrafficGenerator,
+    generator: Box<dyn TrafficGenerator + Send>,
 }
 
 impl Node {
@@ -18,12 +18,13 @@ impl Node {
         allowlist: Vec<NodeID>,
         // NOTE: Send is required for sharing between threads in simulator
         channel: Box<dyn Channel + Send>,
+        traffic_generator: Box<dyn TrafficGenerator + Send>,
     ) -> Self {
         Node {
             id,
             topology: Topology::new(id, relay, allowlist),
             channel,
-            generator: TrafficGenerator::new(),
+            generator: traffic_generator,
         }
     }
 
