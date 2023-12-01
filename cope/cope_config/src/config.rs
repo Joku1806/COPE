@@ -1,15 +1,27 @@
 use std::fmt::Display;
+use std::ops::Deref;
+use std::cmp::Eq;
 
 
 
 // A char that has to be an uppercase letter
-#[derive(Copy, Clone,Debug)]
-pub struct NodeID(pub char);
+// Maybe we change this from char into u8?
+#[derive(Copy, Clone, Debug)]
+pub struct NodeID(char);
 impl NodeID {
     pub fn new(value: char) -> Self {
         if value.is_uppercase() {
             panic!("Cannot assign a non Uppercase Value to NodeID");
         }
+        Self(value)
+    }
+
+    // maybe I can ensure typesafety with macro rules?
+    // but a topic for another time
+    pub const fn cnst(value: char) -> Self {
+        // if value.is_uppercase() {
+        //     panic!("Cannot assign a non Uppercase Value to NodeID");
+        // }
         Self(value)
     }
 
@@ -20,6 +32,21 @@ impl NodeID {
         Self(c)
     }
 }
+
+impl Deref for NodeID {
+    type Target = char;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PartialEq for NodeID {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+impl Eq for NodeID {}
 
 impl Display for NodeID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -35,11 +62,14 @@ impl MacAdress {
         Self(array)
     }
 
+    pub const fn cnst(array: [u8; 6]) -> Self {
+        Self(array)
+    }
+
     pub fn from_string(str: &String) -> Self {
         assert_eq!(12, str.len());
         //check for hexadigit
-        //translate 12 hexadigits into 6 8bit sequence
-        // unimplemented!();
+        // TODO: translate 12 hexadigits into 6 8bit sequence
         Self([0,0,0,0,0,0])
     }
 }
@@ -53,7 +83,7 @@ impl IntoIterator for &MacAdress{
     }
 }
 
-trait ConfigMethods { }
+trait CopeConfig { }
 
 #[derive(Debug)]
 pub struct TmpConfig {
@@ -80,34 +110,16 @@ impl TmpConfig {
     pub fn node_count(&self) -> usize { self.node_count }
     pub fn nodes(&self) -> &Vec<(NodeID, MacAdress)> { &self.nodes }
     pub fn relay(&self) -> NodeID { self.relay }
+    pub fn black_list(&self) -> &Vec<(NodeID, Vec<NodeID>)> { &self.black_list }
 }
 
-impl ConfigMethods for TmpConfig {}
+impl CopeConfig for TmpConfig {}
 
-struct Config<const N: usize> {
-    nodes: [(NodeID, MacAdress); N],
-    relay: NodeID,
-    black_list: [(NodeID, [Option<NodeID>; N]); N],
+pub struct Config<const N: usize> {
+    pub nodes: [(NodeID, MacAdress); N],
+    pub relay: NodeID,
+    // we technically only need N-1 nodes here but yeah
+    pub black_list: [(NodeID, [Option<NodeID>; N]); N],
 }
 
-const CONFIG: Config<3> = Config {
-    nodes: [
-        (NodeID('A'), MacAdress([0,0,0,0,0,0])),
-        (NodeID('B'), MacAdress([0,0,0,0,0,0])),
-        (NodeID('C'), MacAdress([0,0,0,0,0,0])),
-    ],
-    relay: NodeID('B'),
-    black_list: [
-        (NodeID('A'), [
-            Some(NodeID('C')), None, None,
-        ]),
-        (NodeID('B'), [
-            None, None, None,
-        ]),
-        (NodeID('C'), [
-            Some(NodeID('A')), None, None,
-        ]),
-    ],
-};
-
-impl<const N: usize> ConfigMethods for Config<N> { }
+impl<const N: usize> CopeConfig for Config<N> { }

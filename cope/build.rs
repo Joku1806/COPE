@@ -46,7 +46,7 @@ fn main() {
         })
         .collect();
 
-    let config = Config::new(nodes, relay, black_list);
+    let config = TmpConfig::new(nodes, relay, black_list);
     let dest_path = "src/config.rs";
     generate(&config, &dest_path.to_string());
 }
