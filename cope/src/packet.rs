@@ -1,3 +1,4 @@
+use bincode::Error;
 use bitvec::prelude as bv;
 use serde::{Deserialize, Serialize};
 use std::vec::Vec;
@@ -7,20 +8,20 @@ use std::vec::Vec;
 pub type NodeID = char;
 pub type PacketID = u16;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 struct CodingInfo {
     packet_hash: u32,
     nexthop: NodeID,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 struct ReceptionReport {
     source: NodeID,
     last_id: PacketID,
     preceding_ids: bv::BitVec,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Default, Clone)]
 pub struct Packet {
     id: PacketID,
     sender: NodeID,
@@ -45,5 +46,25 @@ impl Packet {
         p.data = Vec::<u8>::new();
 
         return p;
+    }
+
+    pub fn empty() -> Packet {
+        return Packet::default();
+    }
+
+    pub fn deserialize_from(bytes: &[u8]) -> Result<Packet, Error> {
+        bincode::deserialize(bytes)
+    }
+
+    pub fn serialize_into(&self) -> Result<Vec<u8>, Error> {
+        bincode::serialize(self)
+    }
+
+    pub fn set_sender(&mut self, sender: NodeID) {
+        self.sender = sender;
+    }
+
+    pub fn get_sender(&self) -> NodeID {
+        self.sender
     }
 }

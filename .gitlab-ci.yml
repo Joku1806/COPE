@@ -13,5 +13,6 @@ build-job:
 test-job:
     script:
         - source /home/esp/export-esp.sh
+        - cd esp
         - Meta/run_tests.sh /dev/ttyACM0
 # FIXME: Figure out how to run tests on host with Rust

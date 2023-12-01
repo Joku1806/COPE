@@ -1,7 +1,6 @@
 .embuild
+.idea
 .vscode
-build
-simulator/target
 Cargo.lock
 target
 sdkconfig*
