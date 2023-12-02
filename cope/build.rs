@@ -1,10 +1,11 @@
+use cope_config::config::MacAddress;
 use cope_config::config::TmpConfig;
-use cope_config::config::MacAdress;
-use cope_config::config::NodeID;
 use cope_config::file_generator::generate;
+use cope_config::node_id::NodeID;
 use serde::Deserialize;
 use std::env;
 use std::fs;
+use std::str::FromStr;
 
 #[derive(Deserialize)]
 struct TOMLConfig {
@@ -32,16 +33,30 @@ fn main() {
     let nodes = toml_config
         .nodes
         .iter()
-        .map(|(node, adr)| (NodeID::from_string(node), MacAdress::from_string(adr)))
+        .map(|(node, adr)| {
+            (
+                NodeID::from_str(node)
+                    .unwrap_or_else(|e| panic!("Node ID {} is invalid: {}.", node, e)),
+                MacAddress::from_str(adr)
+                    .unwrap_or_else(|e| panic!("MAC Adress {} is invalid: {}.", adr, e)),
+            )
+        })
         .collect();
-    let relay = NodeID::from_string(&toml_config.relay);
+    let relay = NodeID::from_str(&toml_config.relay)
+        .unwrap_or_else(|e| panic!("Node ID {} is invalid: {}.", toml_config.relay, e));
     let black_list = toml_config
         .black_list
         .iter()
         .map(|(node, list)| {
             (
-                NodeID::from_string(node),
-                list.iter().map(|i| NodeID::from_string(i)).collect(),
+                NodeID::from_str(node)
+                    .unwrap_or_else(|e| panic!("Node ID {} is invalid: {}.", node, e)),
+                list.iter()
+                    .map(|i| {
+                        NodeID::from_str(i)
+                            .unwrap_or_else(|e| panic!("Node ID {} is invalid: {}.", i, e))
+                    })
+                    .collect(),
             )
         })
         .collect();
