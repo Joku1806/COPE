@@ -5,6 +5,7 @@
 use crate::config::TmpConfig;
 use crate::types::mac_address::MacAddress;
 use crate::types::node_id::NodeID;
+use crate::types::traffic_generator_type::TrafficGeneratorType;
 use std::fs;
 use std::io::Write;
 
@@ -20,12 +21,18 @@ pub fn generate(config: &TmpConfig, path: &String) {
     .unwrap();
     writeln!(file, "use cope_config::config::*;").unwrap();
     writeln!(file, "use cope_config::types::node_id::NodeID;").unwrap();
-    writeln!(file, "use cope_config::types::mac_address::MacAddress;\n").unwrap();
+    writeln!(file, "use cope_config::types::mac_address::MacAddress;").unwrap();
+    writeln!(
+        file,
+        "use cope_config::types::traffic_generator_type::TrafficGeneratorType;\n"
+    )
+    .unwrap();
     writeln!(file, "pub const CONFIG: Config<{}> = Config{{", node_count).unwrap();
     write_nodes(&mut file, config);
     write_relay(&mut file, config);
     write_whitelist(&mut file, config, node_count, "rx_whitelist");
     write_whitelist(&mut file, config, node_count, "tx_whitelist");
+    write_traffic_generators(&mut file, config);
     writeln!(file, "}};").unwrap();
 }
 
@@ -68,6 +75,19 @@ fn write_whitelist(file: &mut fs::File, config: &TmpConfig, node_count: usize, k
     writeln!(file, "    {}: {},", key, s).unwrap();
 }
 
+fn write_traffic_generators(file: &mut fs::File, config: &TmpConfig) {
+    let mut tgs = String::new();
+    tgs.push_str("[\n");
+    for (n, t) in config.traffic_generators() {
+        println!("{}, {}", n, t);
+        let node = node_id_to_string(n);
+        let tgt = tgt_to_string(t);
+        tgs.push_str(&format!("        ({}, {}),\n", node, tgt));
+    }
+    tgs.push_str("    ]");
+    writeln!(file, "    traffic_generators: {},", tgs).unwrap();
+}
+
 fn node_id_to_string(node_id: &NodeID) -> String {
     return format!("NodeID::new('{}')", node_id.to_string());
 }
@@ -78,6 +98,10 @@ fn mac_adr_to_string(mac_adr: &MacAddress) -> String {
         "MacAddress::new({}, {}, {}, {}, {}, {})",
         bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
     );
+}
+
+fn tgt_to_string(tgt: &TrafficGeneratorType) -> String {
+    return format!("TrafficGeneratorType::{}", tgt.to_string());
 }
 
 fn node_list_to_string(list: &Vec<NodeID>, node_count: usize) -> String {

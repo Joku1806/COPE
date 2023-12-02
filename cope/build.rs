@@ -2,6 +2,7 @@ use cope_config::config::TmpConfig;
 use cope_config::file_generator::generate;
 use cope_config::types::mac_address::MacAddress;
 use cope_config::types::node_id::NodeID;
+use cope_config::types::traffic_generator_type::TrafficGeneratorType;
 use serde::Deserialize;
 use std::env;
 use std::fs;
@@ -13,6 +14,7 @@ struct TOMLConfig {
     relay: String,
     rx_whitelist: Vec<(String, Vec<String>)>,
     tx_whitelist: Vec<(String, Vec<String>)>,
+    traffic_generators: Vec<(String, String)>,
 }
 
 fn main() {
@@ -81,7 +83,21 @@ fn main() {
         })
         .collect();
 
-    let config = TmpConfig::new(nodes, relay, rx_whitelist, tx_whitelist);
+    let traffic_generators = toml_config
+        .traffic_generators
+        .iter()
+        .map(|(node, tgt)| {
+            (
+                NodeID::from_str(node)
+                    .unwrap_or_else(|e| panic!("Node ID {} is invalid: {}.", node, e)),
+                TrafficGeneratorType::from_str(tgt).unwrap_or_else(|e| {
+                    panic!("Traffic Generator Type {} is invalid: {}.", tgt, e)
+                }),
+            )
+        })
+        .collect();
+
+    let config = TmpConfig::new(nodes, relay, rx_whitelist, tx_whitelist, traffic_generators);
     let dest_path = "src/config.rs";
     generate(&config, &dest_path.to_string());
 }

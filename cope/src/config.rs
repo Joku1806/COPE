@@ -2,6 +2,7 @@
 use cope_config::config::*;
 use cope_config::types::node_id::NodeID;
 use cope_config::types::mac_address::MacAddress;
+use cope_config::types::traffic_generator_type::TrafficGeneratorType;
 
 pub const CONFIG: Config<3> = Config{
     nodes: [
@@ -39,5 +40,10 @@ pub const CONFIG: Config<3> = Config{
             Some(NodeID::new('A')),
             None, None, 
         ]),
+    ],
+    traffic_generators: [
+        (NodeID::new('A'), TrafficGeneratorType::Poisson(4096)),
+        (NodeID::new('B'), TrafficGeneratorType::None),
+        (NodeID::new('C'), TrafficGeneratorType::Random(8192)),
     ],
 };
