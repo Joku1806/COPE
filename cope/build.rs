@@ -11,7 +11,8 @@ use std::str::FromStr;
 struct TOMLConfig {
     nodes: Vec<(String, String)>,
     relay: String,
-    black_list: Vec<(String, Vec<String>)>,
+    rx_whitelist: Vec<(String, Vec<String>)>,
+    tx_whitelist: Vec<(String, Vec<String>)>,
 }
 
 fn main() {
@@ -42,10 +43,12 @@ fn main() {
             )
         })
         .collect();
+
     let relay = NodeID::from_str(&toml_config.relay)
         .unwrap_or_else(|e| panic!("Node ID {} is invalid: {}.", toml_config.relay, e));
-    let black_list = toml_config
-        .black_list
+
+    let rx_whitelist = toml_config
+        .rx_whitelist
         .iter()
         .map(|(node, list)| {
             (
@@ -61,7 +64,24 @@ fn main() {
         })
         .collect();
 
-    let config = TmpConfig::new(nodes, relay, black_list);
+    let tx_whitelist = toml_config
+        .tx_whitelist
+        .iter()
+        .map(|(node, list)| {
+            (
+                NodeID::from_str(node)
+                    .unwrap_or_else(|e| panic!("Node ID {} is invalid: {}.", node, e)),
+                list.iter()
+                    .map(|i| {
+                        NodeID::from_str(i)
+                            .unwrap_or_else(|e| panic!("Node ID {} is invalid: {}.", i, e))
+                    })
+                    .collect(),
+            )
+        })
+        .collect();
+
+    let config = TmpConfig::new(nodes, relay, rx_whitelist, tx_whitelist);
     let dest_path = "src/config.rs";
     generate(&config, &dest_path.to_string());
 }

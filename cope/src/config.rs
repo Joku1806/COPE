@@ -2,31 +2,41 @@
 use cope_config::config::*;
 use cope_config::node_id::NodeID;
 
-pub const CONFIG: Config<4> = Config{
+pub const CONFIG: Config<3> = Config{
     nodes: [
         (NodeID::new('A'), MacAddress::new(0, 0, 0, 0, 0, 0)),
         (NodeID::new('B'), MacAddress::new(0, 0, 0, 0, 0, 0)),
         (NodeID::new('C'), MacAddress::new(0, 0, 0, 0, 0, 0)),
-        (NodeID::new('D'), MacAddress::new(0, 0, 0, 0, 0, 0)),
     ],
     relay: NodeID::new('B'),
-    black_list: [
+    rx_whitelist: [
         (NodeID::new('A'), [
-            Some(NodeID::new('C')),
-            None, None, None, 
+            Some(NodeID::new('B')),
+            None, None, 
         ]),
         (NodeID::new('B'), [
-            None, None, None, None, 
-        ]),
-        (NodeID::new('C'), [
             Some(NodeID::new('A')),
-            None, None, None, 
-        ]),
-        (NodeID::new('D'), [
-            Some(NodeID::new('A')),
-            Some(NodeID::new('B')),
             Some(NodeID::new('C')),
             None, 
         ]),
-    ]
+        (NodeID::new('C'), [
+            Some(NodeID::new('B')),
+            None, None, 
+        ]),
+    ],
+    tx_whitelist: [
+        (NodeID::new('A'), [
+            Some(NodeID::new('C')),
+            None, None, 
+        ]),
+        (NodeID::new('B'), [
+            Some(NodeID::new('A')),
+            Some(NodeID::new('C')),
+            None, 
+        ]),
+        (NodeID::new('C'), [
+            Some(NodeID::new('A')),
+            None, None, 
+        ]),
+    ],
 };

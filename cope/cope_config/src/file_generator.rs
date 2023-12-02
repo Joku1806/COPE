@@ -22,7 +22,8 @@ pub fn generate(config: &TmpConfig, path: &String) {
     writeln!(file, "pub const CONFIG: Config<{}> = Config{{", node_count).unwrap();
     write_nodes(&mut file, config);
     write_relay(&mut file, config);
-    write_black_list(&mut file, config, node_count);
+    write_whitelist(&mut file, config, node_count, "rx_whitelist");
+    write_whitelist(&mut file, config, node_count, "tx_whitelist");
     writeln!(file, "}};").unwrap();
 }
 
@@ -43,21 +44,26 @@ fn write_relay(file: &mut fs::File, config: &TmpConfig) {
     writeln!(file, "    relay: {},", relay).unwrap();
 }
 
-fn write_black_list(file: &mut fs::File, config: &TmpConfig, node_count: usize) {
-    let mut black_list = String::new();
-    black_list.push_str("[\n");
+fn write_whitelist(file: &mut fs::File, config: &TmpConfig, node_count: usize, key: &str) {
+    let source = match key {
+        "rx_whitelist" => config.rx_whitelist(),
+        "tx_whitelist" => config.tx_whitelist(),
+        _ => panic!("Invalid key {}", key),
+    };
+
+    let mut s = String::new();
+    s.push_str("[\n");
     for (node, _) in config.nodes() {
         let node_id = node_id_to_string(node);
-        let list = config
-            .black_list()
-            .iter()
-            .find(|(n, _)| *n == *node)
-            .map(|(_, l)| l);
+        let list = match source.iter().find(|(n, _)| *n == *node).map(|(_, l)| l) {
+            Some(res) => res,
+            None => panic!("Did not find Node {} in {}", node_id, key),
+        };
         let bl_atr = node_list_to_string(list, node_count);
-        black_list.push_str(&format!("        ({}, {}),\n", node_id, bl_atr));
+        s.push_str(&format!("        ({}, {}),\n", node_id, bl_atr));
     }
-    black_list.push_str("    ]");
-    writeln!(file, "    black_list: {}", black_list).unwrap();
+    s.push_str("    ]");
+    writeln!(file, "    {}: {},", key, s).unwrap();
 }
 
 fn node_id_to_string(node_id: &NodeID) -> String {
@@ -72,18 +78,17 @@ fn mac_adr_to_string(mac_adr: &MacAddress) -> String {
     );
 }
 
-fn node_list_to_string(list_opt: Option<&Vec<NodeID>>, node_count: usize) -> String {
+fn node_list_to_string(list: &Vec<NodeID>, node_count: usize) -> String {
     let mut str = String::new();
     str.push_str("[\n            ");
-    if let Some(list) = list_opt {
-        for n in list {
-            let node = node_id_to_string(n);
-            str.push_str(&format!("Some({}),\n            ", node));
-        }
+
+    for n in list {
+        let node = node_id_to_string(n);
+        str.push_str(&format!("Some({}),\n            ", node));
     }
-    let list_len = list_opt.map_or(0, |l| l.len());
-    assert_eq!(true, node_count >= list_len);
-    for _ in 0..(node_count - list_len) {
+
+    assert_eq!(true, node_count >= list.len());
+    for _ in 0..(node_count - list.len()) {
         str.push_str("None, ");
     }
     str.push_str("\n        ]");
