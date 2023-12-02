@@ -24,7 +24,7 @@ impl std::fmt::Display for TrafficGeneratorTypeError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum TrafficGeneratorType {
     None,
     Greedy,

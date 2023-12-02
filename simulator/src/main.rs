@@ -1,51 +1,27 @@
 use std::collections::HashMap;
 use std::sync::mpsc::channel;
-use std::thread::sleep;
-use std::time::Duration;
 
-use cope::traffic_generator::greedy_generator::GreedyGenerator;
+use cope::config::CONFIG;
 use cope::Node;
 use simulator_channel::SimulatorChannel;
+
 mod simulator_channel;
 
 fn main() {
     let (tx, rx) = channel();
     let mut node_channels = HashMap::new();
 
-    let (node_tx, node_rx) = channel();
-    node_channels.insert('A', node_tx);
-    let mut node: Node = Node::new(
-        'A',
-        'C',
-        Vec::from(['B']),
-        // NOTE: Grrrr heap allocations.
-        // I could not get this to work using lifetimes,
-        // Apparently you should not store references in structs.
-        // But this should not be a problem on the ESP,
-        // we have enough heap space for this.
-        Box::new(SimulatorChannel::new(node_rx, tx.clone())),
-        Box::new(GreedyGenerator::new()),
-    );
+    let node_ids = CONFIG.get_node_ids();
 
-    std::thread::spawn(move || loop {
-        node.tick();
-        sleep(Duration::from_millis(1000));
-    });
+    for id in node_ids.iter() {
+        let (node_tx, node_rx) = channel();
+        node_channels.insert(*id, node_tx);
+        let mut node = Node::new(*id, Box::new(SimulatorChannel::new(node_rx, tx.clone())));
 
-    let (node_tx, node_rx) = channel();
-    node_channels.insert('B', node_tx);
-    let mut node: Node = Node::new(
-        'B',
-        'C',
-        Vec::from(['A']),
-        Box::new(SimulatorChannel::new(node_rx, tx.clone())),
-        Box::new(GreedyGenerator::new()),
-    );
-
-    std::thread::spawn(move || loop {
-        node.tick();
-        sleep(Duration::from_millis(1000));
-    });
+        std::thread::spawn(move || loop {
+            node.tick();
+        });
+    }
 
     loop {
         if let Ok(packet) = rx.try_recv() {

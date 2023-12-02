@@ -3,9 +3,8 @@ use bitvec::prelude as bv;
 use serde::{Deserialize, Serialize};
 use std::vec::Vec;
 
-// TODO: NodeID should be moved to a different file,
-// once we create one. Maybe protocol.rs?
-pub type NodeID = char;
+use cope_config::types::node_id::NodeID;
+
 pub type PacketID = u16;
 
 #[derive(Debug)]

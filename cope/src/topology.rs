@@ -1,6 +1,5 @@
+use cope_config::types::node_id::NodeID;
 use std::vec::Vec;
-
-pub type NodeID = char;
 
 pub struct Topology {
     own_id: NodeID,
@@ -35,27 +34,47 @@ impl Topology {
 
 #[cfg(test)]
 mod test {
+    use cope_config::types::node_id::NodeID;
+
     use crate::topology::Topology;
 
     #[test]
     fn test_allowlist() {
-        let topology: Topology = Topology::new('A', 'B', Vec::from(['B', 'C']));
+        let topology: Topology = Topology::new(
+            NodeID::new('A'),
+            NodeID::new('B'),
+            Vec::from([NodeID::new('B'), NodeID::new('C')]),
+        );
 
-        assert!(topology.can_receive_from('C'));
-        assert!(!topology.can_receive_from('D'));
+        assert!(topology.can_receive_from(NodeID::new('C')));
+        assert!(!topology.can_receive_from(NodeID::new('D')));
     }
 
     #[test]
     fn test_nexthop_outsider() {
-        let topology: Topology = Topology::new('A', 'B', Vec::from(['B', 'C']));
+        let topology: Topology = Topology::new(
+            NodeID::new('A'),
+            NodeID::new('B'),
+            Vec::from([NodeID::new('B'), NodeID::new('C')]),
+        );
 
-        assert_eq!(topology.nexthop_for_target('C'), 'B');
+        assert_eq!(
+            topology.nexthop_for_target(NodeID::new('C')),
+            NodeID::new('B')
+        );
     }
 
     #[test]
     fn test_nexthop_relay() {
-        let topology: Topology = Topology::new('B', 'B', Vec::from(['B', 'C']));
+        let topology: Topology = Topology::new(
+            NodeID::new('B'),
+            NodeID::new('B'),
+            Vec::from([NodeID::new('B'), NodeID::new('C')]),
+        );
 
-        assert_eq!(topology.nexthop_for_target('C'), 'C');
+        assert_eq!(
+            topology.nexthop_for_target(NodeID::new('C')),
+            NodeID::new('C')
+        );
     }
 }

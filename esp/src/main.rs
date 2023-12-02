@@ -6,8 +6,11 @@ mod test_runner;
 
 use std::time::Duration;
 
-use cope::traffic_generator::poisson_generator::PoissonGenerator;
+use cope::config::CONFIG;
 use cope::Node;
+use cope_config::types::mac_address::MacAddress;
+
+use enumset::enum_set;
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::{
@@ -18,9 +21,6 @@ use esp_idf_svc::{
     nvs::EspDefaultNvsPartition,
     wifi::EspWifi,
 };
-
-use byte_unit::{Byte, Unit};
-use enumset::enum_set;
 
 use crate::esp_channel::EspChannel;
 
@@ -49,15 +49,13 @@ fn main() -> anyhow::Result<()> {
 
     let mut channel = EspChannel::new();
     channel.initialize();
-    let traffic_generator =
-        PoissonGenerator::new(Byte::from_u64_with_unit(2, Unit::KB).unwrap().as_u64() as u32);
-    let mut node = Node::new(
-        'A',
-        'B',
-        Vec::from(['B']),
-        Box::new(channel),
-        Box::new(traffic_generator),
-    );
+
+    // TODO: Read MAC address from ESP
+    let mac = MacAddress::new(0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa);
+    let id = CONFIG
+        .get_node_id_for(mac)
+        .expect("Config should contain Node MAC addresses");
+    let mut node = Node::new(id, Box::new(channel));
 
     loop {
         node.tick();

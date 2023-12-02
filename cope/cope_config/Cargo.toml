@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 macaddr = { version = "1.0.1" }
 byte-unit = { version = "5.0.3" }
+serde = { version = "1.0.192", features = ["derive"] }

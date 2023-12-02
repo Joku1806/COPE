@@ -1,9 +1,10 @@
 use std::cmp::Eq;
+use std::fmt;
 use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use std::fmt;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub enum NodeIDError {
@@ -22,7 +23,7 @@ impl fmt::Display for NodeIDError {
 
 // A char that has to be an uppercase letter
 // Maybe we change this from char into u8?
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, Hash)]
 pub struct NodeID(char);
 impl NodeID {
     pub const fn new(c: char) -> Self {

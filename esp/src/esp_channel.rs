@@ -1,16 +1,15 @@
 use std::collections::{HashMap, VecDeque};
 
+use cope::config::CONFIG;
+use cope_config::types::mac_address::MacAddress;
+use cope_config::types::node_id::NodeID;
 use esp_idf_svc::espnow::{EspNow, PeerInfo};
 
 use cope::channel::{Channel, ChannelError};
 use cope::packet::Packet;
-use cope::topology::NodeID;
-
-type MacAddress = [u8; 6];
 
 pub struct EspChannel<'a> {
     espnow_driver: EspNow<'a>,
-    // TODO: Get this from config
     mac_map: HashMap<NodeID, MacAddress>,
     received_packets: VecDeque<Packet>,
 }
@@ -21,8 +20,7 @@ impl EspChannel<'_> {
 
         return EspChannel {
             espnow_driver,
-            // TODO: get from config
-            mac_map: HashMap::new(),
+            mac_map: HashMap::from(CONFIG.nodes),
             received_packets: VecDeque::new(),
         };
     }
@@ -49,12 +47,12 @@ impl EspChannel<'_> {
 
     fn is_unicast_peer_added(&self, peer: &MacAddress) -> bool {
         // TODO: Better error handling
-        return self.espnow_driver.peer_exists(*peer).unwrap();
+        return self.espnow_driver.peer_exists(peer.into_array()).unwrap();
     }
 
     fn add_unicast_peer(&self, peer: &MacAddress) {
         let mut peer_info = PeerInfo::default();
-        peer_info.peer_addr = *peer;
+        peer_info.peer_addr = peer.into_array();
         peer_info.channel = 0;
         peer_info.encrypt = false;
 
@@ -73,7 +71,9 @@ impl Channel for EspChannel<'_> {
             let serialized = packet.serialize_into().unwrap();
             // NOTE: How does backoff and ACKs work?
             // Does it happen automatically or do we have to write code for it?
-            let result = self.espnow_driver.send(*mac, serialized.as_slice());
+            let result = self
+                .espnow_driver
+                .send(mac.into_array(), serialized.as_slice());
 
             return match result {
                 Ok(_) => Ok(()),
