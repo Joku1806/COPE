@@ -1,7 +1,7 @@
-use cope_config::config::MacAddress;
 use cope_config::config::TmpConfig;
 use cope_config::file_generator::generate;
-use cope_config::node_id::NodeID;
+use cope_config::types::mac_address::MacAddress;
+use cope_config::types::node_id::NodeID;
 use serde::Deserialize;
 use std::env;
 use std::fs;

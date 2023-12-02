@@ -2,8 +2,9 @@
 // User has to provide a instance of TmpConfig that can be written to file
 // User can specify the location of the output file
 
-use crate::config::{MacAddress, TmpConfig};
-use crate::node_id::NodeID;
+use crate::config::TmpConfig;
+use crate::types::mac_address::MacAddress;
+use crate::types::node_id::NodeID;
 use std::fs;
 use std::io::Write;
 
@@ -18,7 +19,8 @@ pub fn generate(config: &TmpConfig, path: &String) {
     )
     .unwrap();
     writeln!(file, "use cope_config::config::*;").unwrap();
-    writeln!(file, "use cope_config::node_id::NodeID;\n").unwrap();
+    writeln!(file, "use cope_config::types::node_id::NodeID;").unwrap();
+    writeln!(file, "use cope_config::types::mac_address::MacAddress;\n").unwrap();
     writeln!(file, "pub const CONFIG: Config<{}> = Config{{", node_count).unwrap();
     write_nodes(&mut file, config);
     write_relay(&mut file, config);

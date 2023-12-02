@@ -1,7 +1,5 @@
-use crate::node_id::NodeID;
-use macaddr::MacAddr6;
-
-pub type MacAddress = MacAddr6;
+use crate::types::mac_address::MacAddress;
+use crate::types::node_id::NodeID;
 
 trait CopeConfig {}
 
