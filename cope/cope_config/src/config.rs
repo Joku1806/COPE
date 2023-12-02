@@ -69,3 +69,73 @@ pub struct Config<const N: usize> {
 }
 
 impl<const N: usize> CopeConfig for Config<N> {}
+
+impl<const N: usize> Config<N> {
+    pub fn get_node_ids(&self) -> Vec<NodeID> {
+        let mut v = vec![];
+
+        for i in 0..N {
+            v.push(self.nodes[i].0);
+        }
+
+        v
+    }
+
+    pub fn get_node_id_for(&self, mac: MacAddress) -> Option<NodeID> {
+        for i in 0..N {
+            if self.nodes[i].1 == mac {
+                return Some(self.nodes[i].0);
+            }
+        }
+
+        None
+    }
+
+    pub fn get_rx_whitelist_for(&self, id: NodeID) -> Option<Vec<NodeID>> {
+        for i in 0..N {
+            if self.rx_whitelist[i].0 == id {
+                let whitelist = self.rx_whitelist[i].1;
+                let mut compact = vec![];
+
+                for _ in 0..N {
+                    if let Some(rx_id) = whitelist[i] {
+                        compact.push(rx_id);
+                    }
+                }
+
+                return Some(compact);
+            }
+        }
+
+        return None;
+    }
+
+    pub fn get_tx_whitelist_for(&self, id: NodeID) -> Option<Vec<NodeID>> {
+        for i in 0..N {
+            if self.tx_whitelist[i].0 == id {
+                let whitelist = self.tx_whitelist[i].1;
+                let mut compact = vec![];
+
+                for _ in 0..N {
+                    if let Some(tx_id) = whitelist[i] {
+                        compact.push(tx_id);
+                    }
+                }
+
+                return Some(compact);
+            }
+        }
+
+        return None;
+    }
+
+    pub fn get_generator_type_for(&self, id: NodeID) -> Option<TrafficGeneratorType> {
+        for i in 0..N {
+            if self.traffic_generators[i].0 == id {
+                return Some(self.traffic_generators[i].1);
+            }
+        }
+
+        None
+    }
+}
