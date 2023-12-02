@@ -1,8 +1,6 @@
+use std::cmp::Eq;
 use std::fmt::Display;
 use std::ops::Deref;
-use std::cmp::Eq;
-
-
 
 // A char that has to be an uppercase letter
 // Maybe we change this from char into u8?
@@ -54,7 +52,6 @@ impl Display for NodeID {
     }
 }
 
-
 #[derive(Debug)]
 pub struct MacAdress(pub [u8; 6]);
 impl MacAdress {
@@ -70,11 +67,11 @@ impl MacAdress {
         assert_eq!(12, str.len());
         //check for hexadigit
         // TODO: translate 12 hexadigits into 6 8bit sequence
-        Self([0,0,0,0,0,0])
+        Self([0, 0, 0, 0, 0, 0])
     }
 }
 
-impl IntoIterator for &MacAdress{
+impl IntoIterator for &MacAdress {
     type Item = u8;
     type IntoIter = std::array::IntoIter<u8, 6>;
 
@@ -83,7 +80,7 @@ impl IntoIterator for &MacAdress{
     }
 }
 
-trait CopeConfig { }
+trait CopeConfig {}
 
 #[derive(Debug)]
 pub struct TmpConfig {
@@ -107,10 +104,18 @@ impl TmpConfig {
         }
     }
 
-    pub fn node_count(&self) -> usize { self.node_count }
-    pub fn nodes(&self) -> &Vec<(NodeID, MacAdress)> { &self.nodes }
-    pub fn relay(&self) -> NodeID { self.relay }
-    pub fn black_list(&self) -> &Vec<(NodeID, Vec<NodeID>)> { &self.black_list }
+    pub fn node_count(&self) -> usize {
+        self.node_count
+    }
+    pub fn nodes(&self) -> &Vec<(NodeID, MacAdress)> {
+        &self.nodes
+    }
+    pub fn relay(&self) -> NodeID {
+        self.relay
+    }
+    pub fn black_list(&self) -> &Vec<(NodeID, Vec<NodeID>)> {
+        &self.black_list
+    }
 }
 
 impl CopeConfig for TmpConfig {}
@@ -122,4 +127,4 @@ pub struct Config<const N: usize> {
     pub black_list: [(NodeID, [Option<NodeID>; N]); N],
 }
 
-impl<const N: usize> CopeConfig for Config<N> { }
+impl<const N: usize> CopeConfig for Config<N> {}
