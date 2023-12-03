@@ -9,7 +9,6 @@ pub struct RandomGenerator {
     generation_timestamp: SystemTime,
     // NOTE: The target network throughput in bytes
     generation_rate: f32,
-    rng: rand::rngs::ThreadRng,
     current_packet_id: PacketID,
 }
 
@@ -19,7 +18,6 @@ impl RandomGenerator {
         RandomGenerator {
             generation_timestamp: SystemTime::now(),
             generation_rate,
-            rng: rand::thread_rng(),
             current_packet_id: 0,
         }
     }
@@ -27,7 +25,7 @@ impl RandomGenerator {
 
 impl TrafficGenerator for RandomGenerator {
     fn generate(&mut self) -> Option<Packet> {
-        let gen: bool = self.rng.gen_bool(0.5);
+        let gen: bool = rand::thread_rng().gen_bool(0.5);
 
         if !gen {
             return None;
