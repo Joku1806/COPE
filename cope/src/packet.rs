@@ -50,7 +50,18 @@ impl Packet {
 
         return p;
     }
-    fn sender(&self) -> NodeID { self.sender }
+    pub fn sender(&self) -> NodeID { self.sender }
+    pub fn receiver(&self) -> NodeID { self.receiver }
+    pub fn id(&self) -> PacketID { self.id }
+
+    pub fn set_sender(mut self, sender: NodeID) -> Self {
+        self.sender = sender;
+        self
+    }
+
+    pub fn to_info(&self) -> String {
+        format!("Packet[Sender: {}, Receiver: {}, ID: {}]", self.sender, self.receiver, self.id)
+    }
 
     //     pub fn with_serialized_size(size: usize) -> Result<Packet, PacketError> {
     //         let mut packet = Packet::default();

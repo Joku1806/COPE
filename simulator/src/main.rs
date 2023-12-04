@@ -25,11 +25,11 @@ fn main() {
 
     loop {
         if let Ok(packet) = rx.try_recv() {
-            for (_, node_tx) in node_channels.iter() {
-                // NOTE: the code below is not needed, wireless is a broadcasting medium
-                // if *id == sender {
-                //     continue;
-                // }
+            let sender = packet.sender();
+            for (id, node_tx) in node_channels.iter() {
+                if *id == sender {
+                    continue;
+                }
 
                 // NOTE: Because the simulator channel is implemented using a multi-producer, single-consumer queue,
                 // we have to forward the packet to each node individually.
