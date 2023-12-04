@@ -42,8 +42,8 @@ pub const CONFIG: Config<3> = Config{
         ]),
     ],
     traffic_generators: [
-        (NodeID::new('A'), TrafficGeneratorType::Poisson(4096)),
+        (NodeID::new('A'), TrafficGeneratorType::Random(1)),
         (NodeID::new('B'), TrafficGeneratorType::None),
-        (NodeID::new('C'), TrafficGeneratorType::Random(8192)),
+        (NodeID::new('C'), TrafficGeneratorType::Random(1)),
     ],
 };
