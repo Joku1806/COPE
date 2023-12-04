@@ -17,3 +17,9 @@ The implementation is made up of three different directories:
 ## Running
 
 To run the simulator, enter the `simulator` directory and run `cargo run`. Likewise, to run on the ESP32, enter the `esp` directory and run `cargo run`.
+
+### Running on the lab machines
+
+The lab machines do not have the `libuv-dev` dependency available that is needed to build espflash. Instead of the espflash install command given in the esp-rs book, run `Meta/install_lab_dependencies.sh` while inside the `esp` directory, which installs a prebuilt version of espflash to `~/.local/bin`.
+
+The newest version of espflash that works on the lab machines is v1.7.0. Because of this, you will need to set the `runner` variable in `.cargo/config.toml` to `espflash --monitor` instead of the current command for `2.x.x` espflash.
