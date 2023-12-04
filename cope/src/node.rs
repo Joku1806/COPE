@@ -27,18 +27,13 @@ impl Node {
             .get_rx_whitelist_for(id)
             .expect("Config should contain rx whitelist");
 
-        // TODO: Pass into TrafficGenerator, so it can randomly choose receivers
-        let _tx_whitelist = CONFIG
-            .get_tx_whitelist_for(id)
-            .expect("Config should contain tx whitelist");
-
         let tgt = CONFIG
             .get_generator_type_for(id)
             .expect("Config should contain traffic generator type");
 
         let receivers = CONFIG
             .get_tx_whitelist_for(id)
-            .expect("Config should contain rx whitelist");
+            .expect("Config should contain tx whitelist");
 
         // TODO: Find a way to move this to TrafficGenerator trait
         let generator: Box<dyn TrafficGenerator + Send> = match tgt {
