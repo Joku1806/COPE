@@ -61,8 +61,14 @@ impl Node {
     pub fn tick(&mut self) {
         if let Some(packet) = self.channel.receive() {
             if self.topology.can_receive_from(packet.get_sender()) {
-                println!("Node {}: Received packet {:?}", self.id, packet);
-                // TODO: network coding
+                // NOTE: This is fine for our very simple topology, but this
+                // will not work for more complicated topologies with multiple hops.
+                if packet.get_receiver() != self.id {
+                    // TODO: network coding
+                    println!("Node {}: Forwarding packet {:?}", self.id, packet);
+                } else {
+                    println!("Node {}: Received packet {:?}", self.id, packet);
+                }
             }
         }
 

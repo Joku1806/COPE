@@ -90,6 +90,10 @@ impl Packet {
         self.receiver = receiver;
     }
 
+    pub fn get_receiver(&self) -> NodeID {
+        self.receiver
+    }
+
     pub fn set_id(&mut self, id: PacketID) {
         self.id = id;
     }
