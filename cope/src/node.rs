@@ -1,13 +1,16 @@
 use std::collections::VecDeque;
 
 use cope_config::types::node_id::NodeID;
-// use cope_config::types::traffic_generator_type::TrafficGeneratorType;
 
 use crate::channel::Channel;
 use crate::config::CONFIG;
 use crate::packet::Packet;
 use crate::topology::Topology;
 use crate::traffic_generator::TrafficGenerator;
+
+use chrono::prelude::{Local, DateTime};
+use colored::Colorize;
+use crate::log;
 
 pub struct Node {
     id: NodeID,
@@ -64,13 +67,13 @@ impl Node {
     fn tick_relay(&mut self) {
         if let Some(packet) = self.channel.receive() {
             // NOTE: Assuming the relay is able to listen to everything
-            println!("[Relay {}]: Recieved {}", self.id, packet.to_info());
+            log!("[Relay {}]: Recieved {}", self.id, packet.to_info());
             self.packet_fifo.push_back(packet);
         }
         // use coding strategy
         // NOTE: this strategy assumes that there is no error
         while let Some(packet) = self.packet_fifo.pop_front() {
-            println!("[Relay {}]: Forwards {}",self.id, packet.to_info());
+            log!("[Relay {}]: Forwards {}",self.id, packet.to_info());
             self.channel.transmit(&packet.set_sender(self.id));
         }
     }
@@ -80,20 +83,24 @@ impl Node {
         if let Some(builder) = self.generator.generate() {
             // FIXME: handle this error
             let packet = builder.sender(self.id).build().unwrap();
-            println!("[Node {}]: Send {}", self.id, packet.to_info());
+            log!("[Node {}]: Send {}", self.id, packet.to_info());
             self.channel.transmit(&packet);
         }
 
         //receive
         if let Some(packet) = self.channel.receive() {
             if self.topology.can_receive_from(packet.sender()) {
-                println!("[Node {}]: Received {}", self.id, packet.to_info());
+                log!("[Node {}]: Received {}", self.id, packet.to_info());
                 // decode
-                if self.id == packet.receiver() {
+                if packet.sender() == CONFIG.relay && packet.receiver() == self.id {
                     // NOTE: Assuming Leaf Nodes don't respond in any way
-                    println!("[Node {}]: Got a Message and is very happy!", self.id);
+                    log!("[Node {}]: Got a Message and is very happy!", self.id);
+                } else if packet.sender() == CONFIG.relay {
+                    log!("[Node {}]: Overheard a Message, that is useless!", self.id);
+                } else if packet.receiver() == self.id{
+                    log!("[Node {}]: Got a Message via another Node which is strange!", self.id);
                 } else {
-                    // possibly store to code later with
+                    log!("[Node {}]: Overheard a Message, to code with.", self.id);
                 }
             }
         }
