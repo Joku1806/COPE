@@ -97,8 +97,8 @@ impl<const N: usize> Config<N> {
                 let whitelist = self.rx_whitelist[i].1;
                 let mut compact = vec![];
 
-                for _ in 0..N {
-                    if let Some(rx_id) = whitelist[i] {
+                for j in 0..N {
+                    if let Some(rx_id) = whitelist[j] {
                         compact.push(rx_id);
                     }
                 }
@@ -116,8 +116,8 @@ impl<const N: usize> Config<N> {
                 let whitelist = self.tx_whitelist[i].1;
                 let mut compact = vec![];
 
-                for _ in 0..N {
-                    if let Some(tx_id) = whitelist[i] {
+                for j in 0..N {
+                    if let Some(tx_id) = whitelist[j] {
                         compact.push(tx_id);
                     }
                 }
