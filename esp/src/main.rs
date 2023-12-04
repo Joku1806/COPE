@@ -19,7 +19,7 @@ use esp_idf_svc::{
         task::watchdog::{TWDTConfig, TWDTDriver},
     },
     nvs::EspDefaultNvsPartition,
-    wifi::EspWifi,
+    wifi::{EspWifi, WifiDeviceId},
 };
 
 use crate::esp_channel::EspChannel;
@@ -36,6 +36,7 @@ fn main() -> anyhow::Result<()> {
     // TODO: Better error handling
     let mut wifi_driver = EspWifi::new(peripherals.modem, sys_loop, Some(nvs)).unwrap();
     wifi_driver.start().unwrap();
+    let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta).unwrap());
 
     let watchdog_config = TWDTConfig {
         duration: Duration::from_secs(2),
@@ -50,8 +51,6 @@ fn main() -> anyhow::Result<()> {
     let mut channel = EspChannel::new();
     channel.initialize();
 
-    // TODO: Read MAC address from ESP
-    let mac = MacAddress::new(0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa);
     let id = CONFIG
         .get_node_id_for(mac)
         .expect("Config should contain Node MAC addresses");
