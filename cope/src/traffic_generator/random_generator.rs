@@ -31,14 +31,16 @@ impl TrafficGenerator for RandomGenerator {
             return None;
         }
 
+        // FIXME: do a functioning target_size
         // TODO: Better error handling
-        let elapsed = self.generation_timestamp.elapsed().unwrap();
-        let target_size = (self.generation_rate * elapsed.as_secs_f32()).floor();
-        self.generation_timestamp = SystemTime::now();
+        // let elapsed = self.generation_timestamp.elapsed().unwrap();
+        // let target_size = (self.generation_rate * elapsed.as_secs_f32()).floor();
+        // self.generation_timestamp = SystemTime::now();
+        let target_size = 200;
 
         let mut p = Packet::with_serialized_size(target_size as usize).unwrap();
         p.set_id(self.current_packet_id);
-        self.current_packet_id += 1;
+        self.current_packet_id = self.current_packet_id.checked_add(1).unwrap_or(0);
 
         return Some(p);
     }
