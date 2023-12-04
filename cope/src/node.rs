@@ -68,8 +68,9 @@ impl Node {
             self.packet_fifo.push_back(packet);
         }
         // use coding strategy
+        // NOTE: this strategy assumes that there is no error
         while let Some(packet) = self.packet_fifo.pop_front() {
-            println!("[Relay {}]: Forwards {}", self.id, packet.to_info());
+            println!("[Relay {}]: Forwards {}",self.id, packet.to_info());
             self.channel.transmit(&packet.set_sender(self.id));
         }
     }
