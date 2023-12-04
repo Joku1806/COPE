@@ -37,7 +37,7 @@ impl TrafficGenerator for PoissonGenerator {
 
         // NOTE: In the future, packet size could also be made random
         // using a bimodal distribution, like it is done in the paper.
-        const PACKET_SIZE: usize = 256;
+        const PACKET_SIZE: usize = 250;
         self.generation_rate = self.distribution.sample(&mut rand::thread_rng());
         self.generation_timestamp +=
             Duration::from_secs_f32(PACKET_SIZE as f32 / self.generation_rate);
