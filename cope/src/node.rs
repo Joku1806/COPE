@@ -1,16 +1,22 @@
 use std::collections::VecDeque;
 
 use cope_config::types::node_id::NodeID;
+use cope_config::types::traffic_generator_type::TrafficGeneratorType;
+use rand_distr::Poisson;
 
-use crate::channel::Channel;
 use crate::config::CONFIG;
 use crate::packet::Packet;
 use crate::topology::Topology;
-use crate::traffic_generator::TrafficGenerator;
+use crate::traffic_generator::none_strategy::NoneStrategy;
+use crate::traffic_generator::periodic_strategy::PeriodicStrategy;
+use crate::traffic_generator::poisson_strategy::PoissonStrategy;
+use crate::traffic_generator::random_strategy::RandomStrategy;
+use crate::traffic_generator::{TGStrategy, TrafficGenerator};
+use crate::{channel::Channel, traffic_generator::greedy_strategy::GreedyStrategy};
 
-use chrono::prelude::{Local, DateTime};
-use colored::Colorize;
 use crate::log;
+use chrono::prelude::{DateTime, Local};
+use colored::Colorize;
 
 pub struct Node {
     id: NodeID,
@@ -36,16 +42,23 @@ impl Node {
         let tx_whitelist = CONFIG
             .get_tx_whitelist_for(id)
             .expect("Config should contain tx whitelist");
-        eprintln!("{:?}:{:?}",&id, &tx_whitelist);
+        eprintln!("{:?}:{:?}", &id, &tx_whitelist);
 
-        let _tgt = CONFIG
+        let tgt = CONFIG
             .get_generator_type_for(id)
             .expect("Config should contain traffic generator type");
 
+        let strategy: Box<dyn TGStrategy + Send> = match tgt {
+            TrafficGeneratorType::None => Box::new(NoneStrategy::new()),
+            TrafficGeneratorType::Greedy => Box::new(GreedyStrategy::new()),
+            TrafficGeneratorType::Poisson(rate) => Box::new(PoissonStrategy::new(rate)),
+            TrafficGeneratorType::Random(rate) => Box::new(RandomStrategy::new(rate)),
+            TrafficGeneratorType::Periodic(duration) => Box::new(PeriodicStrategy::new(duration)),
+        };
         // TODO: add an is_relay() -> bool method to config struct
         let is_relay = CONFIG.relay == id;
 
-        let generator = TrafficGenerator::new(tx_whitelist);
+        let generator = TrafficGenerator::new(strategy, tx_whitelist);
 
         Node {
             id,
@@ -73,7 +86,7 @@ impl Node {
         // use coding strategy
         // NOTE: this strategy assumes that there is no error
         while let Some(packet) = self.packet_fifo.pop_front() {
-            log!("[Relay {}]: Forwards {}",self.id, packet.to_info());
+            log!("[Relay {}]: Forwards {}", self.id, packet.to_info());
             self.channel.transmit(&packet.set_sender(self.id));
         }
     }
@@ -97,8 +110,11 @@ impl Node {
                     log!("[Node {}]: Got a Message and is very happy!", self.id);
                 } else if packet.sender() == CONFIG.relay {
                     log!("[Node {}]: Overheard a Message, that is useless!", self.id);
-                } else if packet.receiver() == self.id{
-                    log!("[Node {}]: Got a Message via another Node which is strange!", self.id);
+                } else if packet.receiver() == self.id {
+                    log!(
+                        "[Node {}]: Got a Message via another Node which is strange!",
+                        self.id
+                    );
                 } else {
                     log!("[Node {}]: Overheard a Message, to code with.", self.id);
                 }

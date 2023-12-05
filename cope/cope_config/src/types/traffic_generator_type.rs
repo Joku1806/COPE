@@ -1,5 +1,7 @@
 use byte_unit::Byte;
+use parse_duration;
 use std::str::FromStr;
+use std::time::Duration;
 
 pub enum TrafficGeneratorTypeError {
     MissingMean,
@@ -30,6 +32,23 @@ pub enum TrafficGeneratorType {
     Greedy,
     Poisson(u32),
     Random(u32),
+    Periodic(Duration),
+}
+
+impl TrafficGeneratorType {
+    fn parse_byte_argument(s: &str) -> Result<u32, TrafficGeneratorTypeError> {
+        match Byte::parse_str(s, true) {
+            Ok(b) => Ok(b.as_u64() as u32),
+            Err(_) => return Err(TrafficGeneratorTypeError::InvalidFormat),
+        }
+    }
+
+    fn parse_duration_argument(s: &str) -> Result<Duration, TrafficGeneratorTypeError> {
+        match parse_duration::parse(s) {
+            Ok(d) => Ok(d),
+            Err(_) => return Err(TrafficGeneratorTypeError::InvalidFormat),
+        }
+    }
 }
 
 impl FromStr for TrafficGeneratorType {
@@ -45,24 +64,21 @@ impl FromStr for TrafficGeneratorType {
         }
 
         let dist_str = parts[0];
-        let mean_str = match parts.get(1) {
-            None => None,
-            // NOTE: Closing brace has to be removed here
-            Some(m) => Some(&m[..m.len() - 1]),
-        };
-        let mean = match mean_str {
-            None => None,
-            Some(s) => match Byte::parse_str(s, true) {
-                Ok(b) => Some(b.as_u64() as u32),
-                Err(_) => return Err(TrafficGeneratorTypeError::InvalidFormat),
-            },
-        };
+        // NOTE: We need to drop the closing brace here
+        let arg = parts.get(1).map(|arg| &arg[..arg.len() - 1]);
 
-        let tg = match (dist_str, mean) {
+        let tg = match (dist_str, arg) {
             ("None", None) => TrafficGeneratorType::None,
             ("Greedy", None) => TrafficGeneratorType::Greedy,
-            ("Poisson", Some(m)) => TrafficGeneratorType::Poisson(m),
-            ("Random", Some(m)) => TrafficGeneratorType::Random(m),
+            ("Poisson", Some(m)) => {
+                TrafficGeneratorType::Poisson(TrafficGeneratorType::parse_byte_argument(m)?)
+            }
+            ("Random", Some(m)) => {
+                TrafficGeneratorType::Random(TrafficGeneratorType::parse_byte_argument(m)?)
+            }
+            ("Periodic", Some(d)) => {
+                TrafficGeneratorType::Periodic(TrafficGeneratorType::parse_duration_argument(d)?)
+            }
             ("None", Some(_)) => return Err(TrafficGeneratorTypeError::InvalidMean),
             ("Greedy", Some(_)) => return Err(TrafficGeneratorTypeError::InvalidMean),
             ("Poisson", None) => return Err(TrafficGeneratorTypeError::MissingMean),
@@ -80,8 +96,9 @@ impl std::fmt::Display for TrafficGeneratorType {
             TrafficGeneratorType::None => write!(f, "None"),
             TrafficGeneratorType::Greedy => write!(f, "Greedy"),
             // NOTE: Is it a problem if we lose precision here?
-            TrafficGeneratorType::Poisson(m) => write!(f, "Poisson({:#})", m),
-            TrafficGeneratorType::Random(m) => write!(f, "Random({:#})", m),
+            TrafficGeneratorType::Poisson(m) => write!(f, "Poisson({})", m),
+            TrafficGeneratorType::Random(m) => write!(f, "Random({})", m),
+            TrafficGeneratorType::Periodic(p) => write!(f, "Periodic({:?})", p),
         }
     }
 }

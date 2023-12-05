@@ -9,7 +9,7 @@ tx_whitelist = [["A", ["C"]], ["B", ["A", "C"]], ["C", ["A"]]]
 traffic_generators = [
     [
         "A",
-        "Poisson(4KiB)",
+        "Periodic(1s)",
     ],
     [
         "B",
@@ -17,6 +17,6 @@ traffic_generators = [
     ],
     [
         "C",
-        "Random(8KiB)",
+        "Periodic(1s)",
     ],
 ]
