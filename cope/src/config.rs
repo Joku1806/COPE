@@ -6,7 +6,7 @@ use cope_config::types::traffic_generator_type::TrafficGeneratorType;
 
 pub const CONFIG: Config<3> = Config{
     nodes: [
-        (NodeID::new('A'), MacAddress::new(0, 0, 0, 0, 0, 0)),
+        (NodeID::new('A'), MacAddress::new(52, 133, 24, 184, 56, 236)),
         (NodeID::new('B'), MacAddress::new(0, 0, 0, 0, 0, 0)),
         (NodeID::new('C'), MacAddress::new(0, 0, 0, 0, 0, 0)),
     ],
