@@ -1,4 +1,17 @@
-nodes = [["A", "000000000000"], ["B", "000000000000"], ["C", "000000000000"]]
+nodes = [
+    [
+        "A",
+        "34:85:18:B9:1B:9C",
+    ],
+    [
+        "B",
+        "34:85:18:B9:1A:D4",
+    ],
+    [
+        "C",
+        "34:85:18:B9:1B:C0",
+    ],
+]
 
 relay = "B"
 
@@ -9,7 +22,7 @@ tx_whitelist = [["A", ["C"]], ["B", ["A", "C"]], ["C", ["A"]]]
 traffic_generators = [
     [
         "A",
-        "Poisson(4KiB)",
+        "Periodic(1s)",
     ],
     [
         "B",
@@ -17,6 +30,6 @@ traffic_generators = [
     ],
     [
         "C",
-        "Random(8KiB)",
+        "Periodic(1s)",
     ],
 ]

@@ -2,16 +2,23 @@ use std::collections::{VecDeque, HashMap};
 use std::usize;
 
 use cope_config::types::node_id::NodeID;
+use cope_config::types::traffic_generator_type::TrafficGeneratorType;
+use rand_distr::Poisson;
 
 use crate::{channel::Channel, packet::CodingInfo};
 use crate::config::CONFIG;
 use crate::packet::{Packet, PacketBuilder, PacketID, PacketReceiver};
 use crate::topology::Topology;
-use crate::traffic_generator::TrafficGenerator;
+use crate::traffic_generator::none_strategy::NoneStrategy;
+use crate::traffic_generator::periodic_strategy::PeriodicStrategy;
+use crate::traffic_generator::poisson_strategy::PoissonStrategy;
+use crate::traffic_generator::random_strategy::RandomStrategy;
+use crate::traffic_generator::{TGStrategy, TrafficGenerator};
+use crate::{traffic_generator::greedy_strategy::GreedyStrategy};
 
-use chrono::prelude::{Local, DateTime};
-use colored::Colorize;
 use crate::log;
+use chrono::prelude::{DateTime, Local};
+use colored::Colorize;
 
 pub struct Node {
     id: NodeID,
@@ -48,23 +55,29 @@ impl Node {
         let tx_whitelist = CONFIG
             .get_tx_whitelist_for(id)
             .expect("Config should contain tx whitelist");
-        eprintln!("{:?}:{:?}",&id, &tx_whitelist);
+        eprintln!("{:?}:{:?}", &id, &tx_whitelist);
 
-        let _tgt = CONFIG
+        let tgt = CONFIG
             .get_generator_type_for(id)
             .expect("Config should contain traffic generator type");
 
+        let strategy: Box<dyn TGStrategy + Send> = match tgt {
+            TrafficGeneratorType::None => Box::new(NoneStrategy::new()),
+            TrafficGeneratorType::Greedy => Box::new(GreedyStrategy::new()),
+            TrafficGeneratorType::Poisson(rate) => Box::new(PoissonStrategy::new(rate)),
+            TrafficGeneratorType::Random(rate) => Box::new(RandomStrategy::new(rate)),
+            TrafficGeneratorType::Periodic(duration) => Box::new(PeriodicStrategy::new(duration)),
+        };
         // TODO: add an is_relay() -> bool method to config struct
         let is_relay = CONFIG.relay == id;
 
-        let generator = TrafficGenerator::new(tx_whitelist.clone(), id);
+        let generator = TrafficGenerator::new(strategy, tx_whitelist.clone(), id);
 
         // intit knowledge_base
         let mut knowledge_base = HashMap::new();
         for node_id in CONFIG.get_node_ids() {
             knowledge_base.insert(node_id, vec![]);
         }
-
 
         Node {
             id,

@@ -5,24 +5,22 @@ use std::time::SystemTime;
 
 // This Generator generates a new packet after a wait_duration
 
-pub struct TimedGenerator {
+pub struct PeriodicStrategy {
     // NOTE: The last timestamp at which a packet was generated
     generation_timestamp: SystemTime,
     wait_duration: std::time::Duration,
-    packet_size: usize,
 }
 
-impl TimedGenerator {
-    pub fn new(wait_duration: std::time::Duration, packet_size: usize) -> Self {
-        TimedGenerator {
+impl PeriodicStrategy {
+    pub fn new(wait_duration: std::time::Duration) -> Self {
+        PeriodicStrategy {
             generation_timestamp: SystemTime::now(),
             wait_duration,
-            packet_size,
         }
     }
 }
 
-impl TGStrategy for TimedGenerator {
+impl TGStrategy for PeriodicStrategy {
     fn generate(&mut self) -> Option<PacketBuilder> {
         let elapsed = self.generation_timestamp.elapsed().unwrap();
         if elapsed < self.wait_duration {
@@ -30,9 +28,7 @@ impl TGStrategy for TimedGenerator {
         }
 
         self.generation_timestamp = SystemTime::now();
-
-        let packet_builder = PacketBuilder::new().with_data_size(self.packet_size);
-
-        Some(packet_builder)
+        const PACKET_SIZE: usize = 128;
+        Some(PacketBuilder::new().with_data_size(PACKET_SIZE))
     }
 }
