@@ -8,27 +8,53 @@ use esp_idf_svc::espnow::{EspNow, PeerInfo};
 use cope::channel::{Channel, ChannelError};
 use cope::packet::Packet;
 
-use log::info;
+use esp_idf_svc::hal::modem::Modem;
+use esp_idf_svc::{
+    eventloop::EspSystemEventLoop,
+    nvs::EspDefaultNvsPartition,
+    wifi::{AuthMethod, ClientConfiguration, Configuration, EspWifi, WifiDeviceId},
+};
 
 pub struct EspChannel<'a> {
     espnow_driver: EspNow<'a>,
+    own_mac: MacAddress,
     mac_map: HashMap<NodeID, MacAddress>,
     received_packets: VecDeque<Packet>,
 }
 
 impl EspChannel<'_> {
-    pub fn new() -> Self {
+    pub fn new(modem: Modem) -> Self {
+        let sys_loop = EspSystemEventLoop::take().unwrap();
+        let nvs = EspDefaultNvsPartition::take().unwrap();
+
+        let mut wifi_driver = EspWifi::new(modem, sys_loop, Some(nvs)).unwrap();
+        wifi_driver.start().unwrap();
+        wifi_driver
+            .set_configuration(&Configuration::Client(ClientConfiguration {
+                ssid: "".into(),
+                bssid: None,
+                auth_method: AuthMethod::None,
+                password: "".into(),
+                channel: Some(8),
+            }))
+            .unwrap();
+        let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta).unwrap());
+
         let espnow_driver = EspNow::take().unwrap();
 
         return EspChannel {
             espnow_driver,
+            own_mac: mac,
             mac_map: HashMap::from(CONFIG.nodes),
             received_packets: VecDeque::new(),
         };
     }
 
-    // NOTE: Make required function for Channel trait?
-    pub fn initialize(&mut self) {
+    pub fn get_mac(&self) -> MacAddress {
+        self.own_mac
+    }
+
+    pub fn setup_reception_callback(&mut self) {
         // TODO: Find out what the two parameters of the callback function are.
         // I'm not sure the current interpretation is correct,
         // I just compared with the definition of esp_now_recv_cb_t
