@@ -38,9 +38,14 @@ impl EspChannel<'_> {
                 channel: Some(8),
             }))
             .unwrap();
-        let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta).unwrap());
+        // NOTE: We need to be in promiscuous mode to overhear unicast packets
+        // not addressed to us.
+        unsafe {
+            esp_idf_svc::sys::esp_wifi_set_promiscuous(true);
+        }
 
         let espnow_driver = EspNow::take().unwrap();
+        let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta).unwrap());
 
         return EspChannel {
             espnow_driver,
@@ -54,7 +59,7 @@ impl EspChannel<'_> {
         self.own_mac
     }
 
-    pub fn setup_reception_callback(&mut self) {
+    pub fn initialize(&mut self) {
         // TODO: Find out what the two parameters of the callback function are.
         // I'm not sure the current interpretation is correct,
         // I just compared with the definition of esp_now_recv_cb_t
@@ -63,32 +68,31 @@ impl EspChannel<'_> {
                 // FIXME: Do not panic if we get a malformed packet
                 self.received_packets
                     .push_back(Packet::deserialize_from(bytes).unwrap());
-                log::info!("[ESPChannel] Received an ESPNow packet.");
+                log::info!("Received an ESPNow packet.");
             })
             .unwrap();
 
-        unsafe {
-            // NOTE: We need to be in promiscuous mode to overhear unicast packets
-            // not addressed to us.
-            // TODO: Error handling?
-            esp_idf_svc::sys::esp_wifi_set_promiscuous(true);
+        // NOTE: In unicast mode, the sender has to be paired with the receiver and vice versa.
+        // To make sure this is guaranteed from the start, we add all unicast peers upfront.
+        for (_, mac) in self.mac_map.iter() {
+            if *mac != self.own_mac {
+                self.add_unicast_peer(mac);
+            }
         }
     }
 
     fn is_unicast_peer_added(&self, peer: &MacAddress) -> bool {
-        // TODO: Better error handling
         return self.espnow_driver.peer_exists(peer.into_array()).unwrap();
     }
 
     fn add_unicast_peer(&self, peer: &MacAddress) {
-        log::info!("[ESPChannel] Add unicast peer with MAC address {}", peer);
+        log::info!("Add unicast peer with MAC address {}", peer);
 
         let mut peer_info = PeerInfo::default();
         peer_info.peer_addr = peer.into_array();
         peer_info.channel = 0;
         peer_info.encrypt = false;
 
-        // TODO: Better error handling
         self.espnow_driver.add_peer(peer_info).unwrap();
     }
 }
@@ -96,15 +100,9 @@ impl EspChannel<'_> {
 impl Channel for EspChannel<'_> {
     fn transmit(&self, packet: &Packet) -> Result<(), ChannelError> {
         if let Some(mac) = self.mac_map.get(&packet.sender()) {
-            if !self.is_unicast_peer_added(mac) {
-                self.add_unicast_peer(mac);
-            }
+            assert!(self.is_unicast_peer_added(mac));
 
-            log::info!(
-                "[ESPChannel] Sending {:?} to {}",
-                packet.coding_header(),
-                mac
-            );
+            log::info!("Sending {:?} to {}", packet.coding_header(), mac);
 
             let serialized = packet.serialize_into().unwrap();
             // NOTE: How does backoff and ACKs work?

@@ -25,7 +25,7 @@ fn main() -> anyhow::Result<()> {
 
     let peripherals = Peripherals::take().unwrap();
     let mut esp_channel = EspChannel::new(peripherals.modem);
-    esp_channel.setup_reception_callback();
+    esp_channel.initialize();
 
     let watchdog_config = TWDTConfig {
         duration: Duration::from_secs(2),
