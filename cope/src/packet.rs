@@ -6,15 +6,32 @@ use cope_config::types::node_id::NodeID;
 
 pub type PacketID = u16;
 
+static mut CURRENT_PACKET_ID: PacketID = 0;
+
+#[inline]
+pub fn next_packet_id() -> PacketID {
+    unsafe {
+        CURRENT_PACKET_ID = CURRENT_PACKET_ID.checked_add(1).unwrap_or(0);
+        return CURRENT_PACKET_ID;
+    }
+}
+
 #[derive(Debug)]
 pub enum PacketError {
     InvalidSize,
 }
 
+#[derive(Debug)]
+pub enum PacketReceiver {
+    Single(NodeID),
+    Multi
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct CodingInfo {
-    packet_hash: u32,
-    nexthop: NodeID,
+    pub source: NodeID,
+    pub id: PacketID,
+    pub nexthop: NodeID,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
@@ -28,7 +45,6 @@ pub struct ReceptionReport {
 pub struct Packet {
     id: PacketID,
     sender: NodeID,
-    receiver: NodeID,
     // NOTE: These could also be HashMaps for easy access.
     // But I am not sure if/when this is needed,
     // so lets stay close to the definition in the paper.
@@ -38,44 +54,23 @@ pub struct Packet {
 }
 
 impl Packet {
-    pub fn new(id: PacketID, sender: NodeID, receiver: NodeID) -> Packet {
-        let mut p: Packet = Packet::default();
-
-        p.id = id;
-        p.sender = sender;
-        p.receiver = receiver;
-        p.coding_header = Vec::<CodingInfo>::new();
-        p.reception_header = Vec::<ReceptionReport>::new();
-        p.data = Vec::<u8>::new();
-
-        return p;
-    }
     pub fn sender(&self) -> NodeID { self.sender }
-    pub fn receiver(&self) -> NodeID { self.receiver }
+    pub fn receiver(&self) -> PacketReceiver {
+        if self.coding_header.len() == 1 {
+            let receiver = self.coding_header.first().unwrap().nexthop;
+            PacketReceiver::Single(receiver)
+        } else {
+            PacketReceiver::Multi
+        }
+    }
     pub fn id(&self) -> PacketID { self.id }
+    pub fn data(&self) -> &Vec<u8> { &self.data }
+    pub fn coding_header(&self) -> &Vec<CodingInfo> { &self.coding_header }
 
     pub fn set_sender(mut self, sender: NodeID) -> Self {
         self.sender = sender;
         self
     }
-
-    pub fn to_info(&self) -> String {
-        format!("Packet[Sender: {}, Receiver: {}, ID: {}]", self.sender, self.receiver, self.id)
-    }
-
-    //     pub fn with_serialized_size(size: usize) -> Result<Packet, PacketError> {
-    //         let mut packet = Packet::default();
-
-    //         let Ok(base_size) = bincode::serialized_size(&packet) else {
-    //             return Err(PacketError::InvalidSize);
-    //         };
-    //         let Some(rest_size) = size.checked_sub(base_size as usize) else {
-    //             return Err(PacketError::InvalidSize);
-    //         };
-
-    //         packet.data = vec![0; rest_size];
-    //         Ok(packet)
-    //     }
 
     pub fn deserialize_from(bytes: &[u8]) -> Result<Packet, bincode::Error> {
         bincode::deserialize(bytes)
@@ -108,11 +103,12 @@ pub enum ErrorKind {}
 impl PacketBuilder {
     pub fn new() -> Self {
         PacketBuilder {
+            id: next_packet_id(),
             ..Default::default()
         }
     }
 
-    pub fn id(mut self, id: PacketID) -> Self {
+    pub fn id_from(mut self, id: PacketID) -> Self {
         self.id = id;
         self
     }
@@ -137,13 +133,24 @@ impl PacketBuilder {
         self
     }
 
+    pub fn coding_header(mut self, coding_header: Vec<CodingInfo>) -> Self {
+        self.coding_header = coding_header;
+        self
+    }
+
+    pub fn single_coding_header(mut self, source: NodeID, nexthop: NodeID) -> Self {
+        self.coding_header = vec![CodingInfo {
+            source, nexthop, id: self.id
+            }];
+        self
+    }
+
     pub fn build(self) -> Result<Packet, Error> {
         // check if everything is set
         // build
         Ok(Packet {
             id: self.id,
             sender: self.sender,
-            receiver: self.receiver,
             coding_header: self.coding_header,
             reception_header: self.reception_header,
             data: self.data,

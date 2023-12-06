@@ -1,10 +1,11 @@
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashMap};
+use std::usize;
 
 use cope_config::types::node_id::NodeID;
 
-use crate::channel::Channel;
+use crate::{channel::Channel, packet::CodingInfo};
 use crate::config::CONFIG;
-use crate::packet::Packet;
+use crate::packet::{Packet, PacketBuilder, PacketID, PacketReceiver};
 use crate::topology::Topology;
 use crate::traffic_generator::TrafficGenerator;
 
@@ -18,7 +19,18 @@ pub struct Node {
     channel: Box<dyn Channel + Send>,
     is_relay: bool,
     generator: TrafficGenerator,
-    packet_fifo: VecDeque<Packet>,
+    tx_whitelist: Vec<NodeID>,
+    // current_packet_id: PacketID,
+    packet_pool: VecDeque<(CodingInfo, Vec<u8>)>,
+    last_fifo_flush: std::time::Instant,
+    knowledge_base: HashMap<NodeID, Vec<CodingInfo>>,
+}
+
+fn xor_data(mut a: Vec<u8>, b: &Vec<u8>) -> Vec<u8> {
+    for i in 0..usize::min(b.len(), a.len()) {
+        a[i] = a[i] ^ b[i];
+    }
+    a
 }
 
 impl Node {
@@ -45,7 +57,14 @@ impl Node {
         // TODO: add an is_relay() -> bool method to config struct
         let is_relay = CONFIG.relay == id;
 
-        let generator = TrafficGenerator::new(tx_whitelist);
+        let generator = TrafficGenerator::new(tx_whitelist.clone(), id);
+
+        // intit knowledge_base
+        let mut knowledge_base = HashMap::new();
+        for node_id in CONFIG.get_node_ids() {
+            knowledge_base.insert(node_id, vec![]);
+        }
+
 
         Node {
             id,
@@ -53,7 +72,10 @@ impl Node {
             channel,
             is_relay,
             generator,
-            packet_fifo: VecDeque::new(),
+            tx_whitelist,
+            last_fifo_flush: std::time::Instant::now(),
+            packet_pool: VecDeque::new(),
+            knowledge_base,
         }
     }
 
@@ -65,44 +87,155 @@ impl Node {
     }
 
     fn tick_relay(&mut self) {
+        // receive
         if let Some(packet) = self.channel.receive() {
-            // NOTE: Assuming the relay is able to listen to everything
-            log!("[Relay {}]: Recieved {}", self.id, packet.to_info());
-            self.packet_fifo.push_back(packet);
+            log!("[Relay {}]: Recieved {:?}", self.id, packet.coding_header());
+            // TODO: extract acks ment for retransmission event
+            // TODO: extract reception reports
+            let coding_info = packet.coding_header().first().unwrap();
+            let data = packet.data();
+            // append knowledge base
+            self.knowledge_base
+                .get_mut(&packet.sender())
+                .expect(&format!("node.knowledge_base should contain {}, but didn't", self.id))
+                .push(coding_info.clone());
+            // add to packet pool
+            self.packet_pool.push_back((coding_info.clone(), data.clone()));
         }
-        // use coding strategy
-        // NOTE: this strategy assumes that there is no error
-        while let Some(packet) = self.packet_fifo.pop_front() {
-            log!("[Relay {}]: Forwards {}",self.id, packet.to_info());
-            self.channel.transmit(&packet.set_sender(self.id));
+
+        // NOTE: we always take some time before we flush fifo to enable coding opportunities
+        let  time_elapsed = self.last_fifo_flush.elapsed();
+        if time_elapsed < std::time::Duration::from_millis(800) { return; }
+        self.last_fifo_flush = std::time::Instant::now();
+        log!("[Relay {}]: Attepts to forward packets.", self.id);
+
+        // deque head of output queue
+        if let Some(packet) = self.packet_pool.pop_front() {
+            log!("[Relay {}]: Starts forwarding packet {:?}", self.id, packet.0);
+            log!("[Relay {}]: Looking for Coding Opportunities", self.id);
+
+            let mut packets: Vec<(CodingInfo, Vec<u8>)> = vec![packet];
+            for &nexthop in &self.tx_whitelist {
+                let Some(index) = self
+                    .packet_pool
+                    .iter()
+                    .position(|(info, _)| info.nexthop == nexthop)
+                else { continue; };
+                let packet_i = &self.packet_pool[index];
+
+                if self.all_nexhops_can_decode(&packets, packet_i) {
+                    let p = self.packet_pool.remove(index).unwrap();
+                    packets.push(p);
+                }
+            }
+            log!("[Relay {}]: Found {} packets to code", self.id, packets.len());
+            // Remove packets from packet_pool
+            // Encode if possible
+            let (header, data) = self.encode(&packets);
+            log!("[Relay {}]: Encoded to {:?}, {:?}", self.id ,&header, &data);
+            // TODO: add acks to header
+            let pack = PacketBuilder::new()
+                .sender(self.id)
+                .data(data)
+                .coding_header(header)
+                .build()
+                .unwrap();
+            // If encoded schedule retransmission
+            // send
+            self.channel.transmit(&pack);
+            log!("[Relay {}]: Forwarded package ", self.id);
+        }else {
+            log!("[Relay {}]: No Packets to forward", self.id);
         }
     }
+
+    fn encode(&self, packets: &Vec<(CodingInfo, Vec<u8>)>) -> (Vec<CodingInfo>, Vec<u8>) {
+        let info = packets
+            .iter()
+            .cloned()
+            .map(|p| p.0)
+            .collect();
+        let data = packets
+            .iter()
+            .cloned()
+            .map(|p| p.1)
+            .fold(packets[0].1.clone(), |acc, x| xor_data(acc, &x));
+        (info, data)
+    }
+
+    // NOTE: Assume that for each next_hop we only add 1 Package
+    // therefore return true if each next_hop knows exactly packets.add(packet).len()-1
+    fn all_nexhops_can_decode( &self,
+        packets: &Vec<(CodingInfo, Vec<u8>)>,
+        packet: &(CodingInfo, Vec<u8>),
+    ) -> bool {
+        let iter = std::iter::once(packet).chain(packets);
+        for (CodingInfo{ nexthop, ..},_) in iter {
+            let knows = self.knowledge_base.get(nexthop)
+                .expect("knowledge_base should have a filed for every node!");
+            let iter1 = std::iter::once(packet).chain(packets);
+            let known_count = iter1
+                .filter(|p| knows.contains(&p.0))
+                .count();
+            if known_count != packets.len() { return false; }
+        }
+        true
+    }
+
 
     fn tick_leaf_node(&mut self) {
         // send
         if let Some(builder) = self.generator.generate() {
             // FIXME: handle this error
-            let packet = builder.sender(self.id).build().unwrap();
-            log!("[Node {}]: Send {}", self.id, packet.to_info());
+            let packet = builder.build().unwrap();
+            log!("[Node {}]: Send {:?}", self.id, &packet.coding_header());
+            // TODO: add reception report
             self.channel.transmit(&packet);
+            // TODO: packets should be stored without reception report and accs
+            let coding_info = packet.coding_header().first().unwrap();
+            self.packet_pool.push_back((coding_info.clone(), packet.data().clone()));
         }
 
-        //receive
+        // receive
         if let Some(packet) = self.channel.receive() {
             if self.topology.can_receive_from(packet.sender()) {
-                log!("[Node {}]: Received {}", self.id, packet.to_info());
-                // decode
-                if packet.sender() == CONFIG.relay && packet.receiver() == self.id {
-                    // NOTE: Assuming Leaf Nodes don't respond in any way
-                    log!("[Node {}]: Got a Message and is very happy!", self.id);
-                } else if packet.sender() == CONFIG.relay {
-                    log!("[Node {}]: Overheard a Message, that is useless!", self.id);
-                } else if packet.receiver() == self.id{
-                    log!("[Node {}]: Got a Message via another Node which is strange!", self.id);
+                log!("[Node {}]: Received {:?}", self.id, packet.coding_header());
+                if packet.sender() == CONFIG.relay{
+                    // decode
+                    if !self.is_next_hop(&packet) {
+                        log!("[Node {}]: Not a next hop of Packet.", self.id);
+                    } else if let Some(data) = self.decode(&packet) {
+                        log!("[Node {}]: Decoded Packet to {:?}.", self.id, data);
+                    } else {
+                        log!("[Node {}]: Could not decode Packet.", self.id);
+                    }
                 } else {
-                    log!("[Node {}]: Overheard a Message, to code with.", self.id);
+                    //store for coding
                 }
             }
         }
     }
+
+    fn is_next_hop(&self, packet: &Packet) -> bool {
+        packet.coding_header().iter().find(|&x| x.nexthop == self.id).is_some()
+    }
+
+    // FIXME: Refactor this mess of a function
+    fn decode(&self, packet: &Packet) -> Option<Vec<u8>> {
+        let mut data: Vec<u8> = packet.data().clone();
+        for info in packet.coding_header() {
+            let p = self.packet_pool
+                .iter()
+                .find(|p| p.0 == *info);
+
+            if let Some(p) = p {
+                data = xor_data(data, &p.1);
+            } else {
+                if info.nexthop == self.id { continue; }
+                return None;
+            }
+        }
+        return Some(data);
+    }
+
 }
