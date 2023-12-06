@@ -9,6 +9,7 @@ use std::time::Duration;
 use cope::config::CONFIG;
 use cope::Node;
 use cope_config::types::mac_address::MacAddress;
+use simple_logger::SimpleLogger;
 
 use enumset::enum_set;
 use esp_idf_svc::{
@@ -26,6 +27,7 @@ use crate::esp_channel::EspChannel;
 
 fn main() -> anyhow::Result<()> {
     esp_idf_svc::sys::link_patches();
+    SimpleLogger::new().init().unwrap();
 
     // TODO: Move all this init stuff to a separate function
     let peripherals = Peripherals::take().unwrap();

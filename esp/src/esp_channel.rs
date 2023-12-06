@@ -8,6 +8,8 @@ use esp_idf_svc::espnow::{EspNow, PeerInfo};
 use cope::channel::{Channel, ChannelError};
 use cope::packet::Packet;
 
+use log::info;
+
 pub struct EspChannel<'a> {
     espnow_driver: EspNow<'a>,
     mac_map: HashMap<NodeID, MacAddress>,
@@ -32,8 +34,10 @@ impl EspChannel<'_> {
         // I just compared with the definition of esp_now_recv_cb_t
         self.espnow_driver
             .register_recv_cb(|_info: &[u8], bytes: &[u8]| {
+                // FIXME: Do not panic if we get a malformed packet
                 self.received_packets
                     .push_back(Packet::deserialize_from(bytes).unwrap());
+                log::info!("[ESPChannel] Received an ESPNow packet.");
             })
             .unwrap();
 
@@ -51,6 +55,8 @@ impl EspChannel<'_> {
     }
 
     fn add_unicast_peer(&self, peer: &MacAddress) {
+        log::info!("[ESPChannel] Add unicast peer with MAC address {}", peer);
+
         let mut peer_info = PeerInfo::default();
         peer_info.peer_addr = peer.into_array();
         peer_info.channel = 0;
@@ -67,6 +73,12 @@ impl Channel for EspChannel<'_> {
             if !self.is_unicast_peer_added(mac) {
                 self.add_unicast_peer(mac);
             }
+
+            log::info!(
+                "[ESPChannel] Sending {:?} to {}",
+                packet.coding_header(),
+                mac
+            );
 
             let serialized = packet.serialize_into().unwrap();
             // NOTE: How does backoff and ACKs work?
