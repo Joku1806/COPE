@@ -21,6 +21,38 @@ use crate::log;
 use chrono::prelude::{DateTime, Local};
 use colored::Colorize;
 
+const MAX_PACKET_POOL_SIZE: usize = 8;
+
+struct KnowledgeBase {
+    table: HashMap<NodeID, Vec<CodingInfo>>,
+    max_size: usize,
+}
+
+impl KnowledgeBase {
+    fn new(next_hops: Vec<NodeID>, max_size: usize) -> Self{
+        let table = next_hops.iter().map(|&i| (i, vec![])).collect();
+        Self { table, max_size }
+    }
+
+    fn knows(&self, next_hop: &NodeID, info: &CodingInfo) -> bool{
+        self.table.get(next_hop)
+            .expect("knowledge_base should have a filed for every node!")
+            .contains(info)
+    }
+
+    fn insert(&mut self, next_hop: NodeID, info: CodingInfo){
+        let list = self.table.get_mut(&next_hop)
+            .expect("KnowledgeBase should contain Entry for nexthop");
+        let is_at_max_size = list.len() >= self.max_size;
+        if  is_at_max_size { list.remove(0); }
+        list.push(info);
+    }
+
+    fn size(&self) -> usize{
+        self.table.iter().map(|(_, list)| list.len()).sum()
+    }
+}
+
 
 pub struct Node {
     id: NodeID,
@@ -31,7 +63,7 @@ pub struct Node {
     tx_whitelist: Vec<NodeID>,
     packet_pool: SimplePacketPool,
     last_fifo_flush: std::time::Instant,
-    knowledge_base: HashMap<NodeID, Vec<CodingInfo>>,
+    knowledge_base: KnowledgeBase
 }
 
 fn xor_data(mut a: Vec<u8>, b: &Vec<u8>) -> Vec<u8> {
@@ -74,22 +106,16 @@ impl Node {
 
         let generator = TrafficGenerator::new(strategy, tx_whitelist.clone(), id);
 
-        // intit knowledge_base
-        let mut knowledge_base = HashMap::new();
-        for node_id in CONFIG.get_node_ids() {
-            knowledge_base.insert(node_id, vec![]);
-        }
-
         Node {
             id,
             topology: Topology::new(id, CONFIG.relay, rx_whitelist),
             channel,
             is_relay,
             generator,
-            tx_whitelist,
+            tx_whitelist: tx_whitelist.clone(),
             last_fifo_flush: std::time::Instant::now(),
-            packet_pool: SimplePacketPool::new(2),
-            knowledge_base,
+            packet_pool: SimplePacketPool::new(MAX_PACKET_POOL_SIZE),
+            knowledge_base: KnowledgeBase::new(tx_whitelist.clone(), MAX_PACKET_POOL_SIZE),
         }
     }
 
@@ -100,9 +126,6 @@ impl Node {
         };
     }
 
-    fn knowledge_base_size(&self) -> usize{
-        self.knowledge_base.iter().map(|(_, list)| list.len()).sum()
-    }
 
     fn tick_relay(&mut self) {
         // receive
@@ -113,13 +136,10 @@ impl Node {
             let coding_info = packet.coding_header().first().unwrap();
             let data = packet.data();
             // append knowledge base
-            self.knowledge_base
-                .get_mut(&packet.sender())
-                .expect(&format!("node.knowledge_base should contain {}, but didn't", self.id))
-                .push(coding_info.clone());
+            self.knowledge_base.insert(packet.sender(), coding_info.clone());
             // add to packet pool
             self.packet_pool.push_packet(packet);
-            log!("[Relay {}]: Has stored {} packages and knows about {}", self.id, self.packet_pool.size(), self.knowledge_base_size());
+            log!("[Relay {}]: Has stored {} packages and knows about {}", self.id, self.packet_pool.size(), self.knowledge_base.size());
         }
 
         // NOTE: we always take some time before we flush fifo to enable coding opportunities
@@ -186,13 +206,12 @@ impl Node {
     ) -> bool {
         let iter = std::iter::once(packet).chain(packets);
         for (CodingInfo{ nexthop, ..},_) in iter {
-            let knows = self.knowledge_base.get(nexthop)
-                .expect("knowledge_base should have a filed for every node!");
             let iter1 = std::iter::once(packet).chain(packets);
-            let known_count = iter1
-                .filter(|p| knows.contains(&p.0))
-                .count();
-            if known_count != packets.len() { return false; }
+            for (info, _) in iter1 {
+                let knows = self.knowledge_base.knows(nexthop, info);
+                let is_nexthop = *nexthop == info.nexthop;
+                if !knows && ! is_nexthop { return false; }
+            }
         }
         true
     }

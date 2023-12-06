@@ -48,7 +48,7 @@ impl PacketPool for SimplePacketPool {
 
     fn push_packet(&mut self, packet: Packet) {
         let is_at_max_size = self.queue.len() >= self.max_size;
-        if  is_at_max_size { self.queue.pop(); }
+        if  is_at_max_size { self.pop_front(); }
         if packet.coding_header().len() != 1 {
             panic!("Expected Native Packet");
         }
