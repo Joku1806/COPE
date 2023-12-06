@@ -7,7 +7,7 @@ use rand_distr::Poisson;
 
 use crate::{channel::Channel, packet::CodingInfo};
 use crate::config::CONFIG;
-use crate::packet::{Packet, PacketBuilder, PacketID, PacketReceiver};
+use crate::packet::{Packet, PacketBuilder};
 use crate::topology::Topology;
 use crate::traffic_generator::none_strategy::NoneStrategy;
 use crate::traffic_generator::periodic_strategy::PeriodicStrategy;
@@ -15,10 +15,12 @@ use crate::traffic_generator::poisson_strategy::PoissonStrategy;
 use crate::traffic_generator::random_strategy::RandomStrategy;
 use crate::traffic_generator::{TGStrategy, TrafficGenerator};
 use crate::{traffic_generator::greedy_strategy::GreedyStrategy};
+use super::packet_pool::{PacketPool, SimplePacketPool};
 
 use crate::log;
 use chrono::prelude::{DateTime, Local};
 use colored::Colorize;
+
 
 pub struct Node {
     id: NodeID,
@@ -27,8 +29,7 @@ pub struct Node {
     is_relay: bool,
     generator: TrafficGenerator,
     tx_whitelist: Vec<NodeID>,
-    // current_packet_id: PacketID,
-    packet_pool: VecDeque<(CodingInfo, Vec<u8>)>,
+    packet_pool: SimplePacketPool,
     last_fifo_flush: std::time::Instant,
     knowledge_base: HashMap<NodeID, Vec<CodingInfo>>,
 }
@@ -87,7 +88,7 @@ impl Node {
             generator,
             tx_whitelist,
             last_fifo_flush: std::time::Instant::now(),
-            packet_pool: VecDeque::new(),
+            packet_pool: SimplePacketPool::new(2),
             knowledge_base,
         }
     }
@@ -97,6 +98,10 @@ impl Node {
             true => self.tick_relay(),
             false => self.tick_leaf_node(),
         };
+    }
+
+    fn knowledge_base_size(&self) -> usize{
+        self.knowledge_base.iter().map(|(_, list)| list.len()).sum()
     }
 
     fn tick_relay(&mut self) {
@@ -113,7 +118,8 @@ impl Node {
                 .expect(&format!("node.knowledge_base should contain {}, but didn't", self.id))
                 .push(coding_info.clone());
             // add to packet pool
-            self.packet_pool.push_back((coding_info.clone(), data.clone()));
+            self.packet_pool.push_packet(packet);
+            log!("[Relay {}]: Has stored {} packages and knows about {}", self.id, self.packet_pool.size(), self.knowledge_base_size());
         }
 
         // NOTE: we always take some time before we flush fifo to enable coding opportunities
@@ -129,15 +135,11 @@ impl Node {
 
             let mut packets: Vec<(CodingInfo, Vec<u8>)> = vec![packet];
             for &nexthop in &self.tx_whitelist {
-                let Some(index) = self
-                    .packet_pool
-                    .iter()
-                    .position(|(info, _)| info.nexthop == nexthop)
+                let Some(packet_i) = self.packet_pool.peek_nexthop_front(nexthop)
                 else { continue; };
-                let packet_i = &self.packet_pool[index];
 
                 if self.all_nexhops_can_decode(&packets, packet_i) {
-                    let p = self.packet_pool.remove(index).unwrap();
+                    let p = self.packet_pool.pop_nexthop_front(nexthop).unwrap();
                     packets.push(p);
                 }
             }
@@ -204,9 +206,9 @@ impl Node {
             log!("[Node {}]: Send {:?}", self.id, &packet.coding_header());
             // TODO: add reception report
             self.channel.transmit(&packet);
-            // TODO: packets should be stored without reception report and accs
             let coding_info = packet.coding_header().first().unwrap();
-            self.packet_pool.push_back((coding_info.clone(), packet.data().clone()));
+            self.packet_pool.push_packet(packet);
+            log!("[Node {}]: Has stored {} packages.", self.id, self.packet_pool.size());
         }
 
         // receive
@@ -222,6 +224,7 @@ impl Node {
                     } else {
                         log!("[Node {}]: Could not decode Packet.", self.id);
                     }
+                    log!("[Node {}]: Has stored {} packages.", self.id, self.packet_pool.size());
                 } else {
                     //store for coding
                 }
@@ -234,21 +237,26 @@ impl Node {
     }
 
     // FIXME: Refactor this mess of a function
-    fn decode(&self, packet: &Packet) -> Option<Vec<u8>> {
-        let mut data: Vec<u8> = packet.data().clone();
+    fn decode(&mut self, packet: &Packet) -> Option<Vec<u8>> {
+        let mut packet_indices: Vec<usize> = vec![];
         for info in packet.coding_header() {
-            let p = self.packet_pool
-                .iter()
-                .find(|p| p.0 == *info);
-
-            if let Some(p) = p {
-                data = xor_data(data, &p.1);
-            } else {
+            let Some(index) = self.packet_pool.position(&info)
+            else{
                 if info.nexthop == self.id { continue; }
                 return None;
-            }
+            };
+            packet_indices.push(index);
+        }
+        if packet_indices.len() != packet.coding_header().len() - 1 {
+            return None
+        }
+
+        let mut data: Vec<u8> = packet.data().clone();
+
+        for &index in &packet_indices {
+            let (_, d) = self.packet_pool.remove(index).unwrap();
+            data = xor_data(data, &d);
         }
         return Some(data);
     }
-
 }

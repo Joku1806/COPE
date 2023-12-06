@@ -27,6 +27,13 @@ pub enum PacketReceiver {
     Multi
 }
 
+#[derive(Debug)]
+pub enum InfoMode {
+    Native(CodingInfo),
+    Encoded(Vec<CodingInfo>),
+    ReportOnly
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct CodingInfo {
     pub source: NodeID,
@@ -137,6 +144,7 @@ impl PacketBuilder {
         self.coding_header = coding_header;
         self
     }
+
 
     pub fn single_coding_header(mut self, source: NodeID, nexthop: NodeID) -> Self {
         self.coding_header = vec![CodingInfo {
