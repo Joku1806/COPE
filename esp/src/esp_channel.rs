@@ -105,6 +105,7 @@ impl EspChannel<'_> {
         peer_info.peer_addr = peer.into_array();
         peer_info.channel = 0;
         peer_info.encrypt = false;
+        peer_info.ifidx = esp_idf_svc::sys::wifi_interface_t_WIFI_IF_STA;
 
         self.espnow_driver.add_peer(peer_info).unwrap();
     }
