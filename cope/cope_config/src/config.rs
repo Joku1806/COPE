@@ -92,41 +92,23 @@ impl<const N: usize> Config<N> {
     }
 
     pub fn get_rx_whitelist_for(&self, id: NodeID) -> Option<Vec<NodeID>> {
-        for i in 0..N {
-            if self.rx_whitelist[i].0 == id {
-                let whitelist = self.rx_whitelist[i].1;
-                let mut compact = vec![];
-
-                for _ in 0..N {
-                    if let Some(rx_id) = whitelist[i] {
-                        compact.push(rx_id);
-                    }
-                }
-
-                return Some(compact);
-            }
-        }
-
-        return None;
+        self.rx_whitelist
+            .iter()
+            .find(|&&(node,_)| id == node)
+            .map(|(_,list)| list
+                .iter()
+                .filter_map(|opt| *opt)
+                .collect::<Vec<NodeID>>())
     }
 
     pub fn get_tx_whitelist_for(&self, id: NodeID) -> Option<Vec<NodeID>> {
-        for i in 0..N {
-            if self.tx_whitelist[i].0 == id {
-                let whitelist = self.tx_whitelist[i].1;
-                let mut compact = vec![];
-
-                for _ in 0..N {
-                    if let Some(tx_id) = whitelist[i] {
-                        compact.push(tx_id);
-                    }
-                }
-
-                return Some(compact);
-            }
-        }
-
-        return None;
+        self.tx_whitelist
+            .iter()
+            .find(|&&(node,_)| id == node)
+            .map(|(_,list)| list
+                .iter()
+                .filter_map(|opt| *opt)
+                .collect::<Vec<NodeID>>())
     }
 
     pub fn get_generator_type_for(&self, id: NodeID) -> Option<TrafficGeneratorType> {

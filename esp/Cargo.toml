@@ -29,6 +29,7 @@ embassy = [
 
 [dependencies]
 log = { version = "0.4", default-features = false }
+simple_logger = { version = "4.3.0" }
 esp-idf-svc = { version = "0.47.1", default-features = false }
 anyhow = { version = "1.0.75" }
 byte-unit = { version = "5.0.3" }

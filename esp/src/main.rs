@@ -8,35 +8,24 @@ use std::time::Duration;
 
 use cope::config::CONFIG;
 use cope::Node;
-use cope_config::types::mac_address::MacAddress;
+use simple_logger::SimpleLogger;
 
 use enumset::enum_set;
-use esp_idf_svc::{
-    eventloop::EspSystemEventLoop,
-    hal::{
-        cpu::Core,
-        peripherals::Peripherals,
-        task::watchdog::{TWDTConfig, TWDTDriver},
-    },
-    nvs::EspDefaultNvsPartition,
-    wifi::{EspWifi, WifiDeviceId},
+use esp_idf_svc::hal::{
+    cpu::Core,
+    peripherals::Peripherals,
+    task::watchdog::{TWDTConfig, TWDTDriver},
 };
 
 use crate::esp_channel::EspChannel;
 
 fn main() -> anyhow::Result<()> {
     esp_idf_svc::sys::link_patches();
-    println!("Hello espnow!");
+    SimpleLogger::new().init().unwrap();
 
-    // TODO: Move all this init stuff to a separate function
     let peripherals = Peripherals::take().unwrap();
-    let sys_loop = EspSystemEventLoop::take().unwrap();
-    let nvs = EspDefaultNvsPartition::take().unwrap();
-
-    // TODO: Better error handling
-    let mut wifi_driver = EspWifi::new(peripherals.modem, sys_loop, Some(nvs)).unwrap();
-    wifi_driver.start().unwrap();
-    let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta).unwrap());
+    let mut esp_channel = EspChannel::new(peripherals.modem);
+    esp_channel.initialize();
 
     let watchdog_config = TWDTConfig {
         duration: Duration::from_secs(2),
@@ -48,13 +37,11 @@ fn main() -> anyhow::Result<()> {
     let mut driver = TWDTDriver::new(peripherals.twdt, &watchdog_config)?;
     let mut watchdog = driver.watch_current_task()?;
 
-    let mut channel = EspChannel::new();
-    channel.initialize();
-
+    let mac = esp_channel.get_mac();
     let id = CONFIG
         .get_node_id_for(mac)
         .expect("Config should contain Node MAC addresses");
-    let mut node = Node::new(id, Box::new(channel));
+    let mut node = Node::new(id, Box::new(esp_channel));
 
     loop {
         node.tick();

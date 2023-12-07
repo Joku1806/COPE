@@ -25,8 +25,7 @@ fn main() {
 
     loop {
         if let Ok(packet) = rx.try_recv() {
-            let sender = packet.get_sender();
-
+            let sender = packet.sender();
             for (id, node_tx) in node_channels.iter() {
                 if *id == sender {
                     continue;

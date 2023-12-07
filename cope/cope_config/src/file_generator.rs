@@ -24,9 +24,10 @@ pub fn generate(config: &TmpConfig, path: &String) {
     writeln!(file, "use cope_config::types::mac_address::MacAddress;").unwrap();
     writeln!(
         file,
-        "use cope_config::types::traffic_generator_type::TrafficGeneratorType;\n"
+        "use cope_config::types::traffic_generator_type::TrafficGeneratorType;"
     )
     .unwrap();
+    writeln!(file, "use std::time::Duration;\n").unwrap();
     writeln!(file, "pub const CONFIG: Config<{}> = Config{{", node_count).unwrap();
     write_nodes(&mut file, config);
     write_relay(&mut file, config);
@@ -101,7 +102,20 @@ fn mac_adr_to_string(mac_adr: &MacAddress) -> String {
 }
 
 fn tgt_to_string(tgt: &TrafficGeneratorType) -> String {
-    return format!("TrafficGeneratorType::{}", tgt.to_string());
+    let serialized = match tgt {
+        TrafficGeneratorType::None => "None".into(),
+        TrafficGeneratorType::Greedy => "Greedy".into(),
+        // NOTE: Is it a problem if we lose precision here?
+        TrafficGeneratorType::Poisson(m) => format!("Poisson({:#})", m),
+        TrafficGeneratorType::Random(m) => format!("Random({:#})", m),
+        TrafficGeneratorType::Periodic(p) => format!(
+            "Periodic(Duration::new({}, {}))",
+            p.as_secs(),
+            p.subsec_nanos()
+        ),
+    };
+
+    return format!("TrafficGeneratorType::{}", serialized);
 }
 
 fn node_list_to_string(list: &Vec<NodeID>, node_count: usize) -> String {
