@@ -104,7 +104,13 @@ impl EspChannel<'_> {
 impl Channel for EspChannel<'_> {
     fn transmit(&self, packet: &Packet) -> Result<(), ChannelError> {
         if let Some(mac) = self.mac_map.get(&packet.sender()) {
-            assert!(self.is_unicast_peer_added(mac));
+            if !(self.is_unicast_peer_added(mac)) {
+                log::warn!(
+                    "Peer {} should have already been added. Is the peer part of the config?",
+                    mac
+                );
+                self.add_unicast_peer(mac);
+            }
 
             log::info!("Sending {:?} to {}", packet.coding_header(), mac);
 
