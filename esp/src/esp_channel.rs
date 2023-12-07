@@ -66,9 +66,13 @@ impl EspChannel<'_> {
         self.espnow_driver
             .register_recv_cb(|_info: &[u8], bytes: &[u8]| {
                 // FIXME: Do not panic if we get a malformed packet
-                self.received_packets
-                    .push_back(Packet::deserialize_from(bytes).unwrap());
-                log::info!("Received an ESPNow packet.");
+                let deserialized = Packet::deserialize_from(bytes);
+                if let Err(e) = deserialized {
+                    log::warn!("Could not decode received packet: {}", e);
+                    return;
+                }
+
+                self.received_packets.push_back(deserialized.unwrap());
             })
             .unwrap();
 
