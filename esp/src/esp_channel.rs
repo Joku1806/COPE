@@ -28,7 +28,11 @@ impl EspChannel<'_> {
         let nvs = EspDefaultNvsPartition::take().unwrap();
 
         let mut wifi_driver = EspWifi::new(modem, sys_loop, Some(nvs)).unwrap();
-        wifi_driver.start().unwrap();
+        // NOTE: We need to be in promiscuous mode to overhear unicast packets
+        // not addressed to us.
+        unsafe {
+            esp_idf_svc::sys::esp_wifi_set_promiscuous(true);
+        }
         wifi_driver
             .set_configuration(&Configuration::Client(ClientConfiguration {
                 ssid: "".into(),
@@ -38,11 +42,7 @@ impl EspChannel<'_> {
                 channel: Some(8),
             }))
             .unwrap();
-        // NOTE: We need to be in promiscuous mode to overhear unicast packets
-        // not addressed to us.
-        unsafe {
-            esp_idf_svc::sys::esp_wifi_set_promiscuous(true);
-        }
+        wifi_driver.start().unwrap();
 
         let espnow_driver = EspNow::take().unwrap();
         let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta).unwrap());
