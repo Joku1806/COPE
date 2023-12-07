@@ -27,6 +27,15 @@ impl EspChannel<'_> {
         let sys_loop = EspSystemEventLoop::take().unwrap();
         let nvs = EspDefaultNvsPartition::take().unwrap();
 
+        // NOTE: These are all init function calls I could find in the espnow examples
+        // at https://github.com/espressif/esp-now/blob/master/examples.
+        // Do we call all of these at some point?
+        // esp_wifi_init(&cfg) - yes, in EspWifi::new
+        // esp_wifi_set_mode(WIFI_MODE_STA) - yes, in wifi_driver.set_configuration
+        // esp_wifi_set_storage(WIFI_STORAGE_RAM) - no, but NVS Flash is used as storage in EspDefaultNvsPartition::take
+        // esp_wifi_set_ps(WIFI_PS_NONE) - yes, in EspNow::take
+        // esp_wifi_start() - yes, in wifi_driver.start
+        // espnow_init(&espnow_config); - yes, in EspNow::take
         let mut wifi_driver = EspWifi::new(modem, sys_loop, Some(nvs)).unwrap();
         // NOTE: We need to be in promiscuous mode to overhear unicast packets
         // not addressed to us.
