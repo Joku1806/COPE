@@ -92,7 +92,7 @@ impl EspChannel<'_> {
         self.espnow_driver
             .register_send_cb(|mac: &[u8], status: SendStatus| {
                 if matches!(status, SendStatus::FAIL) {
-                    log::warn!("Sending packet to {:?} failed!", mac)
+                    log::warn!("Sending packet to {:?} failed!", mac);
                 }
             })
             .unwrap();
