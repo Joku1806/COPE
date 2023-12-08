@@ -1,5 +1,6 @@
 use core::hint::black_box;
 use std::collections::{HashMap, VecDeque};
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 use cope::config::CONFIG;
 use cope_config::types::mac_address::MacAddress;
@@ -25,6 +26,8 @@ pub struct EspChannel<'a> {
     espnow_driver: EspNow<'a>,
     own_mac: MacAddress,
     mac_map: HashMap<NodeID, MacAddress>,
+    rx_callback_sender: Sender<Packet>,
+    rx_callback_receiver: Receiver<Packet>,
     received_packets: VecDeque<Packet>,
 }
 
@@ -63,13 +66,16 @@ impl EspChannel<'_> {
 
         let espnow_driver = EspNow::take().unwrap();
         let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta).unwrap());
+        let (tx, rx) = channel();
 
         return EspChannel {
             _wifi_driver: wifi_driver,
             espnow_driver,
             own_mac: mac,
             mac_map: HashMap::from(CONFIG.nodes),
-            received_packets: VecDeque::new(),
+            rx_callback_sender: tx,
+            rx_callback_receiver: rx,
+            received_packets: black_box(VecDeque::new()),
         };
     }
 
@@ -84,7 +90,7 @@ impl EspChannel<'_> {
         self.espnow_driver
             .register_recv_cb(|_info: &[u8], bytes: &[u8]| {
                 match Packet::deserialize_from(bytes) {
-                    Ok(p) => black_box(self.received_packets.push_back(p)),
+                    Ok(p) => self.rx_callback_sender.send(p).unwrap(),
                     Err(e) => log::warn!("Could not decode received packet: {}", e),
                 };
             })
@@ -161,6 +167,12 @@ impl Channel for EspChannel<'_> {
     }
 
     fn receive(&mut self) -> Option<Packet> {
-        return black_box(self.received_packets.pop_front());
+        // NOTE: We need to combine back packets here,
+        // once we allow them to be larger than the maximum EspNow Frame Size (250B).
+        while let Ok(p) = self.rx_callback_receiver.recv() {
+            self.received_packets.push_back(p);
+        }
+
+        self.received_packets.pop_front()
     }
 }
