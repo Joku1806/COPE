@@ -1,6 +1,7 @@
 use core::hint::black_box;
 use std::collections::{HashMap, VecDeque};
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::time::Duration;
 
 use cope::config::CONFIG;
 use cope_config::types::mac_address::MacAddress;
@@ -169,7 +170,12 @@ impl Channel for EspChannel<'_> {
     fn receive(&mut self) -> Option<Packet> {
         // NOTE: We need to combine back packets here,
         // once we allow them to be larger than the maximum EspNow Frame Size (250B).
-        while let Ok(p) = self.rx_callback_receiver.recv() {
+        // NOTE: We only block for a small amount of time,
+        // so we don't get killed by the Watchdog timer.
+        while let Ok(p) = self
+            .rx_callback_receiver
+            .recv_timeout(Duration::from_millis(100))
+        {
             self.received_packets.push_back(p);
         }
 
