@@ -75,13 +75,10 @@ impl EspChannel<'_> {
         // I just compared with the definition of esp_now_recv_cb_t
         self.espnow_driver
             .register_recv_cb(|_info: &[u8], bytes: &[u8]| {
-                let deserialized = Packet::deserialize_from(bytes);
-                if let Err(e) = deserialized {
-                    log::warn!("Could not decode received packet: {}", e);
-                    return;
-                }
-
-                self.received_packets.push_back(deserialized.unwrap());
+                match Packet::deserialize_from(bytes) {
+                    Ok(p) => self.received_packets.push_back(p),
+                    Err(e) => log::warn!("Could not decode received packet: {}", e),
+                };
             })
             .unwrap();
 
