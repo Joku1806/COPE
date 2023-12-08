@@ -126,7 +126,12 @@ impl EspChannel<'_> {
 
 impl Channel for EspChannel<'_> {
     fn transmit(&self, packet: &Packet) -> Result<(), ChannelError> {
-        if let Some(mac) = self.mac_map.get(&packet.sender()) {
+        let receiver = match packet.canonical_receiver() {
+            None => return Err(ChannelError::UnknownReceiver),
+            Some(r) => r,
+        };
+
+        if let Some(mac) = self.mac_map.get(&receiver) {
             if !(self.is_unicast_peer_added(mac)) {
                 log::warn!(
                     "Peer {} should have already been added. Is the peer part of the config?",

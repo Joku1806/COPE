@@ -76,6 +76,16 @@ impl Packet {
     pub fn data(&self) -> &PacketData { &self.data }
     pub fn coding_header(&self) -> &Vec<CodingInfo> { &self.coding_header }
 
+    // FIXME: This is just a hack, we always need `some` NodeID to act as the receiver,
+    // because the ESPChannel needs to internally translate the receiver to a single MAC address.
+    // Check if we should instead change receiver to what it was before!
+    pub fn canonical_receiver(&self) -> Option<NodeID> {
+        match self.coding_header.len() {
+            0 => None,
+            _ => Some(self.coding_header.first().unwrap().nexthop),
+        }
+    }
+
     pub fn set_sender(mut self, sender: NodeID) -> Self {
         self.sender = sender;
         self

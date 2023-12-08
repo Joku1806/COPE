@@ -3,6 +3,7 @@ use crate::packet::Packet;
 pub enum ChannelError {
     ReachedMaxBackoffs,
     NoACK,
+    UnknownReceiver,
 }
 
 pub trait Channel {
