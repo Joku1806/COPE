@@ -13,7 +13,8 @@ use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::modem::Modem,
     nvs::EspDefaultNvsPartition,
-    wifi::{AuthMethod, ClientConfiguration, Configuration, EspWifi, WifiDeviceId},
+    sys::{wifi_mode_t_WIFI_MODE_STA, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE},
+    wifi::{EspWifi, WifiDeviceId},
 };
 
 pub struct EspChannel<'a> {
@@ -38,21 +39,16 @@ impl EspChannel<'_> {
         // esp_wifi_start() - yes, in wifi_driver.start
         // espnow_init(&espnow_config); - yes, in EspNow::take
         let mut wifi_driver = EspWifi::new(modem, sys_loop, Some(nvs)).unwrap();
-        // NOTE: We need to be in promiscuous mode to overhear unicast packets
-        // not addressed to us.
         unsafe {
+            esp_idf_svc::sys::esp_wifi_set_mode(wifi_mode_t_WIFI_MODE_STA);
+            // NOTE: We need to be in promiscuous mode to overhear unicast packets
+            // not addressed to us.
             esp_idf_svc::sys::esp_wifi_set_promiscuous(true);
         }
-        wifi_driver
-            .set_configuration(&Configuration::Client(ClientConfiguration {
-                ssid: "".into(),
-                bssid: None,
-                auth_method: AuthMethod::None,
-                password: "".into(),
-                channel: Some(8),
-            }))
-            .unwrap();
         wifi_driver.start().unwrap();
+        unsafe {
+            esp_idf_svc::sys::esp_wifi_set_channel(8, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE);
+        }
 
         let espnow_driver = EspNow::take().unwrap();
         let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta).unwrap());
