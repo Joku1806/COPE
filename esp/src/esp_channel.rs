@@ -8,9 +8,10 @@ use esp_idf_svc::espnow::{EspNow, PeerInfo};
 use cope::channel::{Channel, ChannelError};
 use cope::packet::Packet;
 
-use esp_idf_svc::hal::modem::Modem;
 use esp_idf_svc::{
+    espnow::SendStatus,
     eventloop::EspSystemEventLoop,
+    hal::modem::Modem,
     nvs::EspDefaultNvsPartition,
     wifi::{AuthMethod, ClientConfiguration, Configuration, EspWifi, WifiDeviceId},
 };
@@ -74,7 +75,6 @@ impl EspChannel<'_> {
         // I just compared with the definition of esp_now_recv_cb_t
         self.espnow_driver
             .register_recv_cb(|_info: &[u8], bytes: &[u8]| {
-                // FIXME: Do not panic if we get a malformed packet
                 let deserialized = Packet::deserialize_from(bytes);
                 if let Err(e) = deserialized {
                     log::warn!("Could not decode received packet: {}", e);
@@ -82,6 +82,14 @@ impl EspChannel<'_> {
                 }
 
                 self.received_packets.push_back(deserialized.unwrap());
+            })
+            .unwrap();
+
+        self.espnow_driver
+            .register_send_cb(|mac: &[u8], status: SendStatus| {
+                if matches!(status, SendStatus::FAIL) {
+                    log::warn!("Sending packet to {:?} failed!", mac)
+                }
             })
             .unwrap();
 
