@@ -1,3 +1,4 @@
+use core::hint::black_box;
 use std::collections::{HashMap, VecDeque};
 
 use cope::config::CONFIG;
@@ -160,6 +161,6 @@ impl Channel for EspChannel<'_> {
     }
 
     fn receive(&mut self) -> Option<Packet> {
-        return self.received_packets.pop_front();
+        return black_box(self.received_packets.pop_front());
     }
 }
