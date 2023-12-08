@@ -84,7 +84,7 @@ impl EspChannel<'_> {
         self.espnow_driver
             .register_recv_cb(|_info: &[u8], bytes: &[u8]| {
                 match Packet::deserialize_from(bytes) {
-                    Ok(p) => self.received_packets.push_back(p),
+                    Ok(p) => black_box(self.received_packets.push_back(p)),
                     Err(e) => log::warn!("Could not decode received packet: {}", e),
                 };
             })
