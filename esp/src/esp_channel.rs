@@ -18,6 +18,9 @@ use esp_idf_svc::{
 };
 
 pub struct EspChannel<'a> {
+    // NOTE: We do not access the WiFi Driver after initialize(),
+    // but we need to keep it around so it doesn't deinit when dropped.
+    _wifi_driver: EspWifi<'a>,
     espnow_driver: EspNow<'a>,
     own_mac: MacAddress,
     mac_map: HashMap<NodeID, MacAddress>,
@@ -61,6 +64,7 @@ impl EspChannel<'_> {
         let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta).unwrap());
 
         return EspChannel {
+            _wifi_driver: wifi_driver,
             espnow_driver,
             own_mac: mac,
             mac_map: HashMap::from(CONFIG.nodes),
