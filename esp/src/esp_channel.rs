@@ -13,7 +13,7 @@ use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::modem::Modem,
     nvs::EspDefaultNvsPartition,
-    sys::{wifi_mode_t_WIFI_MODE_STA, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE},
+    sys::{esp, wifi_mode_t_WIFI_MODE_STA, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE},
     wifi::{EspWifi, WifiDeviceId},
 };
 
@@ -40,14 +40,21 @@ impl EspChannel<'_> {
         // espnow_init(&espnow_config); - yes, in EspNow::take
         let mut wifi_driver = EspWifi::new(modem, sys_loop, Some(nvs)).unwrap();
         unsafe {
-            esp_idf_svc::sys::esp_wifi_set_mode(wifi_mode_t_WIFI_MODE_STA);
+            esp!(esp_idf_svc::sys::esp_wifi_set_mode(
+                wifi_mode_t_WIFI_MODE_STA
+            ))
+            .unwrap();
             // NOTE: We need to be in promiscuous mode to overhear unicast packets
             // not addressed to us.
-            esp_idf_svc::sys::esp_wifi_set_promiscuous(true);
+            esp!(esp_idf_svc::sys::esp_wifi_set_promiscuous(true)).unwrap();
         }
         wifi_driver.start().unwrap();
         unsafe {
-            esp_idf_svc::sys::esp_wifi_set_channel(8, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE);
+            esp!(esp_idf_svc::sys::esp_wifi_set_channel(
+                8,
+                wifi_second_chan_t_WIFI_SECOND_CHAN_NONE
+            ))
+            .unwrap();
         }
 
         let espnow_driver = EspNow::take().unwrap();
