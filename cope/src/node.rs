@@ -5,6 +5,7 @@ use cope_config::types::node_id::NodeID;
 use cope_config::types::traffic_generator_type::TrafficGeneratorType;
 use rand_distr::Poisson;
 
+use crate::kbase::{SimpleKBase, KBase};
 use crate::{channel::Channel, packet::CodingInfo};
 use crate::config::CONFIG;
 use crate::packet::{Packet, PacketBuilder};
@@ -14,7 +15,7 @@ use crate::traffic_generator::periodic_strategy::PeriodicStrategy;
 use crate::traffic_generator::poisson_strategy::PoissonStrategy;
 use crate::traffic_generator::random_strategy::RandomStrategy;
 use crate::traffic_generator::{TGStrategy, TrafficGenerator};
-use crate::{traffic_generator::greedy_strategy::GreedyStrategy};
+use crate::traffic_generator::greedy_strategy::GreedyStrategy;
 use super::packet_pool::{PacketPool, SimplePacketPool};
 
 use crate::log;
@@ -22,37 +23,6 @@ use chrono::prelude::{DateTime, Local};
 use colored::Colorize;
 
 const MAX_PACKET_POOL_SIZE: usize = 8;
-
-struct KnowledgeBase {
-    table: HashMap<NodeID, Vec<CodingInfo>>,
-    max_size: usize,
-}
-
-impl KnowledgeBase {
-    fn new(next_hops: Vec<NodeID>, max_size: usize) -> Self{
-        let table = next_hops.iter().map(|&i| (i, vec![])).collect();
-        Self { table, max_size }
-    }
-
-    fn knows(&self, next_hop: &NodeID, info: &CodingInfo) -> bool{
-        self.table.get(next_hop)
-            .expect("knowledge_base should have a filed for every node!")
-            .contains(info)
-    }
-
-    fn insert(&mut self, next_hop: NodeID, info: CodingInfo){
-        let list = self.table.get_mut(&next_hop)
-            .expect("KnowledgeBase should contain Entry for nexthop");
-        let is_at_max_size = list.len() >= self.max_size;
-        if  is_at_max_size { list.remove(0); }
-        list.push(info);
-    }
-
-    fn size(&self) -> usize{
-        self.table.iter().map(|(_, list)| list.len()).sum()
-    }
-}
-
 
 pub struct Node {
     id: NodeID,
@@ -63,7 +33,7 @@ pub struct Node {
     tx_whitelist: Vec<NodeID>,
     packet_pool: SimplePacketPool,
     last_fifo_flush: std::time::Instant,
-    knowledge_base: KnowledgeBase
+    kbase: SimpleKBase
 }
 
 fn xor_data(mut a: Vec<u8>, b: &Vec<u8>) -> Vec<u8> {
@@ -115,7 +85,7 @@ impl Node {
             tx_whitelist: tx_whitelist.clone(),
             last_fifo_flush: std::time::Instant::now(),
             packet_pool: SimplePacketPool::new(MAX_PACKET_POOL_SIZE),
-            knowledge_base: KnowledgeBase::new(tx_whitelist.clone(), MAX_PACKET_POOL_SIZE),
+            kbase: SimpleKBase::new(tx_whitelist.clone(), MAX_PACKET_POOL_SIZE),
         }
     }
 
@@ -136,10 +106,10 @@ impl Node {
             let coding_info = packet.coding_header().first().unwrap();
             let data = packet.data();
             // append knowledge base
-            self.knowledge_base.insert(packet.sender(), coding_info.clone());
+            self.kbase.insert(packet.sender(), coding_info.clone());
             // add to packet pool
             self.packet_pool.push_packet(packet);
-            log!("[Relay {}]: Has stored {} packages and knows about {}", self.id, self.packet_pool.size(), self.knowledge_base.size());
+            log!("[Relay {}]: Has stored {} packages and knows about {}", self.id, self.packet_pool.size(), self.kbase.size());
         }
 
         // NOTE: we always take some time before we flush fifo to enable coding opportunities
@@ -208,14 +178,13 @@ impl Node {
         for (CodingInfo{ nexthop, ..},_) in iter {
             let iter1 = std::iter::once(packet).chain(packets);
             for (info, _) in iter1 {
-                let knows = self.knowledge_base.knows(nexthop, info);
+                let knows = self.kbase.knows(nexthop, info);
                 let is_nexthop = *nexthop == info.nexthop;
                 if !knows && ! is_nexthop { return false; }
             }
         }
         true
     }
-
 
     fn tick_leaf_node(&mut self) {
         // send
