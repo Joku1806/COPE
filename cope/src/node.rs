@@ -1,14 +1,12 @@
-use std::collections::{VecDeque, HashMap};
 use std::usize;
 
 use cope_config::types::node_id::NodeID;
 use cope_config::types::traffic_generator_type::TrafficGeneratorType;
-use rand_distr::Poisson;
 
 use crate::kbase::{SimpleKBase, KBase};
 use crate::{channel::Channel, packet::CodingInfo};
 use crate::config::CONFIG;
-use crate::packet::{Packet, PacketBuilder};
+use crate::packet::{Packet, PacketBuilder, PacketData};
 use crate::topology::Topology;
 use crate::traffic_generator::none_strategy::NoneStrategy;
 use crate::traffic_generator::periodic_strategy::PeriodicStrategy;
@@ -36,12 +34,6 @@ pub struct Node {
     kbase: SimpleKBase
 }
 
-fn xor_data(mut a: Vec<u8>, b: &Vec<u8>) -> Vec<u8> {
-    for i in 0..usize::min(b.len(), a.len()) {
-        a[i] = a[i] ^ b[i];
-    }
-    a
-}
 
 impl Node {
     pub fn new(
@@ -96,7 +88,6 @@ impl Node {
         };
     }
 
-
     fn tick_relay(&mut self) {
         // receive
         if let Some(packet) = self.channel.receive() {
@@ -104,7 +95,6 @@ impl Node {
             // TODO: extract acks ment for retransmission event
             // TODO: extract reception reports
             let coding_info = packet.coding_header().first().unwrap();
-            let data = packet.data();
             // append knowledge base
             self.kbase.insert(packet.sender(), coding_info.clone());
             // add to packet pool
@@ -123,7 +113,7 @@ impl Node {
             log!("[Relay {}]: Starts forwarding packet {:?}", self.id, packet.0);
             log!("[Relay {}]: Looking for Coding Opportunities", self.id);
 
-            let mut packets: Vec<(CodingInfo, Vec<u8>)> = vec![packet];
+            let mut packets: Vec<(CodingInfo, PacketData)> = vec![packet];
             for &nexthop in &self.tx_whitelist {
                 let Some(packet_i) = self.packet_pool.peek_nexthop_front(nexthop)
                 else { continue; };
@@ -154,7 +144,7 @@ impl Node {
         }
     }
 
-    fn encode(&self, packets: &Vec<(CodingInfo, Vec<u8>)>) -> (Vec<CodingInfo>, Vec<u8>) {
+    fn encode(&self, packets: &Vec<(CodingInfo, PacketData)>) -> (Vec<CodingInfo>, PacketData) {
         let info = packets
             .iter()
             .cloned()
@@ -164,15 +154,15 @@ impl Node {
             .iter()
             .cloned()
             .map(|p| p.1)
-            .fold(packets[0].1.clone(), |acc, x| xor_data(acc, &x));
+            .fold(packets[0].1.clone(), |acc, x| acc.xor(&x));
         (info, data)
     }
 
     // NOTE: Assume that for each next_hop we only add 1 Package
     // therefore return true if each next_hop knows exactly packets.add(packet).len()-1
     fn all_nexhops_can_decode( &self,
-        packets: &Vec<(CodingInfo, Vec<u8>)>,
-        packet: &(CodingInfo, Vec<u8>),
+        packets: &Vec<(CodingInfo, PacketData)>,
+        packet: &(CodingInfo, PacketData),
     ) -> bool {
         let iter = std::iter::once(packet).chain(packets);
         for (CodingInfo{ nexthop, ..},_) in iter {
@@ -194,7 +184,6 @@ impl Node {
             log!("[Node {}]: Send {:?}", self.id, &packet.coding_header());
             // TODO: add reception report
             self.channel.transmit(&packet);
-            let coding_info = packet.coding_header().first().unwrap();
             self.packet_pool.push_packet(packet);
             log!("[Node {}]: Has stored {} packages.", self.id, self.packet_pool.size());
         }
@@ -225,7 +214,7 @@ impl Node {
     }
 
     // FIXME: Refactor this mess of a function
-    fn decode(&mut self, packet: &Packet) -> Option<Vec<u8>> {
+    fn decode(&mut self, packet: &Packet) -> Option<PacketData> {
         let mut packet_indices: Vec<usize> = vec![];
         for info in packet.coding_header() {
             let Some(index) = self.packet_pool.position(&info)
@@ -239,11 +228,11 @@ impl Node {
             return None
         }
 
-        let mut data: Vec<u8> = packet.data().clone();
+        let mut data: PacketData = packet.data().clone();
 
         for &index in &packet_indices {
             let (_, d) = self.packet_pool.remove(index).unwrap();
-            data = xor_data(data, &d);
+            data = data.xor(&d);
         }
         return Some(data);
     }

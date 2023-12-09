@@ -4,6 +4,8 @@ use std::vec::Vec;
 
 use cope_config::types::node_id::NodeID;
 
+use super::PacketData;
+
 pub type PacketID = u16;
 
 static mut CURRENT_PACKET_ID: PacketID = 0;
@@ -28,7 +30,7 @@ pub enum PacketReceiver {
 }
 
 #[derive(Debug)]
-pub enum InfoMode {
+pub enum CodingHeader {
     Native(CodingInfo),
     Encoded(Vec<CodingInfo>),
     ReportOnly
@@ -41,14 +43,14 @@ pub struct CodingInfo {
     pub nexthop: NodeID,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ReceptionReport {
     source: NodeID,
     last_id: PacketID,
     preceding_ids: bv::BitVec,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Packet {
     id: PacketID,
     sender: NodeID,
@@ -57,7 +59,7 @@ pub struct Packet {
     // so lets stay close to the definition in the paper.
     coding_header: Vec<CodingInfo>,
     reception_header: Vec<ReceptionReport>,
-    data: Vec<u8>,
+    data: PacketData,
 }
 
 impl Packet {
@@ -71,7 +73,7 @@ impl Packet {
         }
     }
     pub fn id(&self) -> PacketID { self.id }
-    pub fn data(&self) -> &Vec<u8> { &self.data }
+    pub fn data(&self) -> &PacketData { &self.data }
     pub fn coding_header(&self) -> &Vec<CodingInfo> { &self.coding_header }
 
     pub fn set_sender(mut self, sender: NodeID) -> Self {
@@ -95,7 +97,7 @@ pub struct PacketBuilder {
     receiver: NodeID,
     coding_header: Vec<CodingInfo>,
     reception_header: Vec<ReceptionReport>,
-    data: Vec<u8>,
+    data: PacketData,
 }
 
 #[derive(Debug)]
@@ -130,13 +132,18 @@ impl PacketBuilder {
         self
     }
 
-    pub fn data(mut self, data: Vec<u8>) -> Self {
+    pub fn data(mut self, data: PacketData) -> Self {
         self.data = data;
         self
     }
 
+    pub fn data_raw(mut self, data: Vec<u8>) -> Self {
+        self.data = PacketData::new(data);
+        self
+    }
+
     pub fn with_data_size(mut self, data_size: usize) -> Self {
-        self.data = vec![0; data_size];
+        self.data = PacketData::new(vec![0; data_size]);
         self
     }
 

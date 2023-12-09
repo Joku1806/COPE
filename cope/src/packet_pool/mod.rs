@@ -1,11 +1,13 @@
 pub mod simple_packet_pool;
 
 
+use crate::packet::PacketData;
+
 use super::packet::{Packet, CodingInfo};
 use cope_config::types::node_id::NodeID;
 pub use simple_packet_pool::SimplePacketPool;
 
-pub type PPEntry = (CodingInfo, Vec<u8>);
+pub type PPEntry = (CodingInfo, PacketData);
 
 pub trait PacketPool {
     fn peek_front(&self) -> Option<&PPEntry>;
