@@ -1,4 +1,3 @@
-use core::hint::black_box;
 use std::collections::{HashMap, VecDeque};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
@@ -76,7 +75,7 @@ impl EspChannel<'_> {
             mac_map: HashMap::from(CONFIG.nodes),
             rx_callback_sender: tx,
             rx_callback_receiver: rx,
-            received_packets: black_box(VecDeque::new()),
+            received_packets: VecDeque::new(),
         };
     }
 
