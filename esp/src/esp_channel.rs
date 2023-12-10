@@ -1,5 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use cope::channel::{Channel, ChannelError};
 use cope::config::CONFIG;
@@ -24,9 +24,8 @@ pub struct EspChannel {
     espnow_driver: EspNow<'static>,
     own_mac: MacAddress,
     mac_map: HashMap<NodeID, MacAddress>,
+    rx_queue: Arc<Mutex<VecDeque<Packet>>>,
 }
-
-static RECEIVE_QUEUE: Mutex<VecDeque<Packet>> = Mutex::new(VecDeque::new());
 
 impl EspChannel {
     pub fn new(modem: Modem) -> Self {
@@ -69,6 +68,7 @@ impl EspChannel {
             espnow_driver,
             own_mac: mac,
             mac_map: HashMap::from(CONFIG.nodes),
+            rx_queue: Arc::new(Mutex::new(VecDeque::new())),
         };
     }
 
@@ -77,10 +77,11 @@ impl EspChannel {
     }
 
     pub fn initialize(&mut self) {
-        let rx_callback = |_id: WifiDeviceId, bytes: &[u8]| {
+        let rx_queue_clone = self.rx_queue.clone();
+        let rx_callback = move |_id: WifiDeviceId, bytes: &[u8]| {
             if let Ok(frame) = espnow_frame::EspNowFrame::try_from(bytes) {
                 match Packet::deserialize_from(frame.get_body()) {
-                    Ok(p) => RECEIVE_QUEUE.lock().unwrap().push_back(p),
+                    Ok(p) => rx_queue_clone.lock().unwrap().push_back(p),
                     Err(e) => log::warn!("Could not decode received packet: {}", e),
                 };
             }
@@ -170,6 +171,6 @@ impl Channel for EspChannel {
     fn receive(&mut self) -> Option<Packet> {
         // NOTE: We need to combine back packets here,
         // once we allow them to be larger than the maximum EspNow Frame Size (250B).
-        RECEIVE_QUEUE.lock().unwrap().pop_front()
+        self.rx_queue.lock().unwrap().pop_front()
     }
 }
