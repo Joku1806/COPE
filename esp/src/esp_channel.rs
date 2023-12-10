@@ -31,35 +31,8 @@ impl EspChannel {
     pub fn new(modem: Modem) -> Self {
         let sys_loop = EspSystemEventLoop::take().unwrap();
         let nvs = EspDefaultNvsPartition::take().unwrap();
-
-        // NOTE: These are all init function calls I could find in the espnow examples
-        // at https://github.com/espressif/esp-now/blob/master/examples.
-        // Do we call all of these at some point?
-        // esp_wifi_init(&cfg) - yes, in EspWifi::new
-        // esp_wifi_set_mode(WIFI_MODE_STA) - yes, in wifi_driver.set_configuration
-        // esp_wifi_set_storage(WIFI_STORAGE_RAM) - no, but NVS Flash is used as storage in EspDefaultNvsPartition::take
-        // esp_wifi_set_ps(WIFI_PS_NONE) - yes, in EspNow::take
-        // esp_wifi_start() - yes, in wifi_driver.start
-        // espnow_init(&espnow_config); - yes, in EspNow::take
         let mut wifi_driver = EspWifi::new(modem, sys_loop, Some(nvs)).unwrap();
-        unsafe {
-            esp!(esp_idf_svc::sys::esp_wifi_set_mode(
-                wifi_mode_t_WIFI_MODE_STA
-            ))
-            .unwrap();
-            // NOTE: We need to be in promiscuous mode to overhear unicast packets
-            // not addressed to us.
-            esp!(esp_idf_svc::sys::esp_wifi_set_promiscuous(true)).unwrap();
-        }
         wifi_driver.start().unwrap();
-        unsafe {
-            esp!(esp_idf_svc::sys::esp_wifi_set_channel(
-                8,
-                wifi_second_chan_t_WIFI_SECOND_CHAN_NONE
-            ))
-            .unwrap();
-        }
-
         let espnow_driver = EspNow::take().unwrap();
         let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta).unwrap());
 
@@ -96,7 +69,32 @@ impl EspChannel {
             .set_callbacks(rx_callback, tx_callback)
             .unwrap();
 
+        // NOTE: These are all init function calls I could find in the espnow examples
+        // at https://github.com/espressif/esp-now/blob/master/examples.
+        // Do we call all of these at some point?
+        // esp_wifi_init(&cfg) - yes, in EspWifi::new
+        // esp_wifi_set_mode(WIFI_MODE_STA) - yes, in wifi_driver.set_configuration
+        // esp_wifi_set_storage(WIFI_STORAGE_RAM) - no, but NVS Flash is used as storage in EspDefaultNvsPartition::take
+        // esp_wifi_set_ps(WIFI_PS_NONE) - yes, in EspNow::take
+        // esp_wifi_start() - yes, in wifi_driver.start
+        // espnow_init(&espnow_config); - yes, in EspNow::take
+        unsafe {
+            esp!(esp_idf_svc::sys::esp_wifi_set_mode(
+                wifi_mode_t_WIFI_MODE_STA
+            ))
+            .unwrap();
+            // NOTE: We need to be in promiscuous mode to overhear unicast packets
+            // not addressed to us.
+            esp!(esp_idf_svc::sys::esp_wifi_set_promiscuous(true)).unwrap();
+        }
         self.wifi_driver.start().unwrap();
+        unsafe {
+            esp!(esp_idf_svc::sys::esp_wifi_set_channel(
+                8,
+                wifi_second_chan_t_WIFI_SECOND_CHAN_NONE
+            ))
+            .unwrap();
+        }
 
         self.espnow_driver
             .register_send_cb(|mac: &[u8], status: SendStatus| {
