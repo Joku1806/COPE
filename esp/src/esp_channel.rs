@@ -1,3 +1,4 @@
+use core::ffi;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
@@ -6,6 +7,13 @@ use cope::config::CONFIG;
 use cope::packet::Packet;
 use cope_config::types::{mac_address::MacAddress, node_id::NodeID};
 
+use esp_idf_svc::sys::{
+    esp_err_t, esp_wifi_internal_free_rx_buffer, esp_wifi_internal_reg_rxcb,
+    esp_wifi_set_promiscuous_rx_cb, wifi_promiscuous_pkt_type_t,
+    wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL, wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA,
+    wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT, wifi_promiscuous_pkt_type_t_WIFI_PKT_MISC, EspError,
+    ESP_OK,
+};
 use esp_idf_svc::{
     espnow::{EspNow, PeerInfo, SendStatus},
     eventloop::EspSystemEventLoop,
@@ -26,6 +34,44 @@ pub struct EspChannel {
     mac_map: HashMap<NodeID, MacAddress>,
     rx_queue: Arc<Mutex<VecDeque<Packet>>>,
 }
+
+pub struct Newtype<T>(pub T);
+
+enum PromiscuousPktType {
+    ManagementFrame,
+    ControlFrame,
+    DataFrame,
+    MiscalleneousFrame,
+}
+
+impl From<PromiscuousPktType> for Newtype<wifi_promiscuous_pkt_type_t> {
+    fn from(pkt_type: PromiscuousPktType) -> Self {
+        Newtype(match pkt_type {
+            PromiscuousPktType::ManagementFrame => wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT,
+            PromiscuousPktType::ControlFrame => wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL,
+            PromiscuousPktType::DataFrame => wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA,
+            PromiscuousPktType::MiscalleneousFrame => wifi_promiscuous_pkt_type_t_WIFI_PKT_MISC,
+        })
+    }
+}
+
+impl From<Newtype<wifi_promiscuous_pkt_type_t>> for PromiscuousPktType {
+    #[allow(non_upper_case_globals)]
+    fn from(pkt_type: Newtype<wifi_promiscuous_pkt_type_t>) -> Self {
+        match pkt_type.0 {
+            wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT => PromiscuousPktType::ManagementFrame,
+            wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL => PromiscuousPktType::ControlFrame,
+            wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA => PromiscuousPktType::DataFrame,
+            wifi_promiscuous_pkt_type_t_WIFI_PKT_MISC => PromiscuousPktType::MiscalleneousFrame,
+            _ => panic!(),
+        }
+    }
+}
+
+#[allow(clippy::type_complexity)]
+static mut PROMISCUOUS_RX_CALLBACK: Option<
+    Box<dyn FnMut(&[u8], PromiscuousPktType) -> Result<(), EspError> + 'static>,
+> = None;
 
 impl EspChannel {
     pub fn new(modem: Modem) -> Self {
@@ -49,9 +95,50 @@ impl EspChannel {
         self.own_mac
     }
 
+    unsafe extern "C" fn handle_promiscuous_rx(
+        // FIXME: Figure out the correct parameters
+        buf: *mut ffi::c_void,
+        len: u32,
+    ) {
+        let _ = PROMISCUOUS_RX_CALLBACK.as_mut().unwrap()(
+            core::slice::from_raw_parts(buf as *mut _, len as usize),
+            // NOTE: Currently we just lie here.
+            // I don't know how we should get this information.
+            PromiscuousPktType::DataFrame,
+        );
+    }
+
+    fn set_promiscuous_rx_callback<'a, R>(&'a mut self, mut rx_callback: R) -> Result<(), EspError>
+    where
+        R: FnMut(&[u8], PromiscuousPktType) -> Result<(), EspError> + Send + 'static,
+    {
+        let _ = self.wifi_driver.disconnect();
+        let _ = self.wifi_driver.stop();
+
+        #[allow(clippy::type_complexity)]
+        let rx_callback: Box<
+            Box<dyn FnMut(&[u8], PromiscuousPktType) -> Result<(), EspError> + Send + 'a>,
+        > = Box::new(Box::new(move |data, pkt_type| rx_callback(data, pkt_type)));
+
+        #[allow(clippy::type_complexity)]
+        let rx_callback: Box<
+            Box<dyn FnMut(&[u8], PromiscuousPktType) -> Result<(), EspError> + Send + 'static>,
+        > = unsafe { core::mem::transmute(rx_callback) };
+
+        unsafe {
+            PROMISCUOUS_RX_CALLBACK = Some(rx_callback);
+
+            esp!(esp_wifi_set_promiscuous_rx_cb(Some(
+                Self::handle_promiscuous_rx
+            )))?;
+        }
+
+        Ok(())
+    }
+
     pub fn initialize(&mut self) {
         let rx_queue_clone = self.rx_queue.clone();
-        let rx_callback = move |_id: WifiDeviceId, bytes: &[u8]| {
+        let rx_callback = move |bytes: &[u8], _pkt_type: PromiscuousPktType| {
             if let Ok(frame) = espnow_frame::EspNowFrame::try_from(bytes) {
                 match Packet::deserialize_from(frame.get_body()) {
                     Ok(p) => rx_queue_clone.lock().unwrap().push_back(p),
@@ -62,12 +149,7 @@ impl EspChannel {
             Ok(())
         };
 
-        let tx_callback = |_id: WifiDeviceId, _bytes: &[u8], _success: bool| {};
-
-        self.wifi_driver
-            .driver_mut()
-            .set_callbacks(rx_callback, tx_callback)
-            .unwrap();
+        self.set_promiscuous_rx_callback(rx_callback).unwrap();
 
         // NOTE: These are all init function calls I could find in the espnow examples
         // at https://github.com/espressif/esp-now/blob/master/examples.
