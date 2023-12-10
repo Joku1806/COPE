@@ -2,6 +2,7 @@
 #![test_runner(test_runner::run)]
 
 mod esp_channel;
+mod espnow_frame;
 mod test_runner;
 
 use std::time::Duration;

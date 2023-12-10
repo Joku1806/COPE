@@ -1,17 +1,13 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::time::Duration;
-
-use cope::config::CONFIG;
-use cope_config::types::mac_address::MacAddress;
-use cope_config::types::node_id::NodeID;
-use esp_idf_svc::espnow::{EspNow, PeerInfo};
+use std::sync::Mutex;
 
 use cope::channel::{Channel, ChannelError};
+use cope::config::CONFIG;
 use cope::packet::Packet;
+use cope_config::types::{mac_address::MacAddress, node_id::NodeID};
 
 use esp_idf_svc::{
-    espnow::SendStatus,
+    espnow::{EspNow, PeerInfo, SendStatus},
     eventloop::EspSystemEventLoop,
     hal::modem::Modem,
     nvs::EspDefaultNvsPartition,
@@ -19,19 +15,20 @@ use esp_idf_svc::{
     wifi::{EspWifi, WifiDeviceId},
 };
 
-pub struct EspChannel<'a> {
+use crate::espnow_frame;
+
+pub struct EspChannel {
     // NOTE: We do not access the WiFi Driver after initialize(),
     // but we need to keep it around so it doesn't deinit when dropped.
-    _wifi_driver: EspWifi<'a>,
-    espnow_driver: EspNow<'a>,
+    wifi_driver: EspWifi<'static>,
+    espnow_driver: EspNow<'static>,
     own_mac: MacAddress,
     mac_map: HashMap<NodeID, MacAddress>,
-    rx_callback_sender: Sender<Packet>,
-    rx_callback_receiver: Receiver<Packet>,
-    received_packets: VecDeque<Packet>,
 }
 
-impl EspChannel<'_> {
+static RECEIVE_QUEUE: Mutex<VecDeque<Packet>> = Mutex::new(VecDeque::new());
+
+impl EspChannel {
     pub fn new(modem: Modem) -> Self {
         let sys_loop = EspSystemEventLoop::take().unwrap();
         let nvs = EspDefaultNvsPartition::take().unwrap();
@@ -66,16 +63,12 @@ impl EspChannel<'_> {
 
         let espnow_driver = EspNow::take().unwrap();
         let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta).unwrap());
-        let (tx, rx) = channel();
 
         return EspChannel {
-            _wifi_driver: wifi_driver,
+            wifi_driver,
             espnow_driver,
             own_mac: mac,
             mac_map: HashMap::from(CONFIG.nodes),
-            rx_callback_sender: tx,
-            rx_callback_receiver: rx,
-            received_packets: VecDeque::new(),
         };
     }
 
@@ -84,17 +77,25 @@ impl EspChannel<'_> {
     }
 
     pub fn initialize(&mut self) {
-        // TODO: Find out what the two parameters of the callback function are.
-        // I'm not sure the current interpretation is correct,
-        // I just compared with the definition of esp_now_recv_cb_t
-        self.espnow_driver
-            .register_recv_cb(|_info: &[u8], bytes: &[u8]| {
-                match Packet::deserialize_from(bytes) {
-                    Ok(p) => self.rx_callback_sender.send(p).unwrap(),
+        let rx_callback = |_id: WifiDeviceId, bytes: &[u8]| {
+            if let Ok(frame) = espnow_frame::EspNowFrame::try_from(bytes) {
+                match Packet::deserialize_from(frame.get_body()) {
+                    Ok(p) => RECEIVE_QUEUE.lock().unwrap().push_back(p),
                     Err(e) => log::warn!("Could not decode received packet: {}", e),
                 };
-            })
+            }
+
+            Ok(())
+        };
+
+        let tx_callback = |_id: WifiDeviceId, _bytes: &[u8], _success: bool| {};
+
+        self.wifi_driver
+            .driver_mut()
+            .set_callbacks(rx_callback, tx_callback)
             .unwrap();
+
+        self.wifi_driver.start().unwrap();
 
         self.espnow_driver
             .register_send_cb(|mac: &[u8], status: SendStatus| {
@@ -131,7 +132,7 @@ impl EspChannel<'_> {
     }
 }
 
-impl Channel for EspChannel<'_> {
+impl Channel for EspChannel {
     fn transmit(&self, packet: &Packet) -> Result<(), ChannelError> {
         let receiver = match packet.canonical_receiver() {
             None => return Err(ChannelError::UnknownReceiver),
@@ -169,15 +170,6 @@ impl Channel for EspChannel<'_> {
     fn receive(&mut self) -> Option<Packet> {
         // NOTE: We need to combine back packets here,
         // once we allow them to be larger than the maximum EspNow Frame Size (250B).
-        // NOTE: We only block for a small amount of time,
-        // so we don't get killed by the Watchdog timer.
-        while let Ok(p) = self
-            .rx_callback_receiver
-            .recv_timeout(Duration::from_millis(100))
-        {
-            self.received_packets.push_back(p);
-        }
-
-        self.received_packets.pop_front()
+        RECEIVE_QUEUE.lock().unwrap().pop_front()
     }
 }
