@@ -1,3 +1,5 @@
+use bitvec::{field::BitField, prelude as bv, view::BitView};
+
 #[derive(Debug)]
 pub enum EspressifWifiFrameDecodingError {
     InvalidLength,
@@ -149,15 +151,11 @@ impl TryFrom<u32> for GuideInterval {
 struct RadioMetadataHeader {
     rssi: i32,
     rate: u32,
-    __pad0__: u32,
     sig_mode: SigMode,
-    __pad1__: u32,
     mcs: u32,
     cwb: ChannelBandwidth,
-    __pad2__: u32,
     smoothing: ChannelEstimateSmoothing,
     ppdu_type: PPDUType,
-    __pad3__: u32,
     aggregation: AggregationType,
     stbc: STBC,
     fec_coding: u32,
@@ -166,14 +164,10 @@ struct RadioMetadataHeader {
     ampdu_cnt: u32,
     channel: u32,
     secondary_channel: u32,
-    __pad4__: u32,
     // NOTE: If this is micros since device startup, converting to DateTime is meaningless
     timestamp_us: u32,
-    __pad5__: u32,
-    __pad6__: u32,
     ant: u32,
     sig_len: u32,
-    __pad7__: u32,
     rx_state: u32,
 }
 
@@ -189,46 +183,33 @@ impl TryFrom<&[u8]> for EspressifWifiFrame {
     type Error = EspressifWifiFrameDecodingError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        const HEADER_LENGTH: usize = 108;
-
-        if bytes.len() < HEADER_LENGTH {
-            return Err(EspressifWifiFrameDecodingError::InvalidLength);
-        }
-
-        let sig_len = u32::from_be_bytes(bytes[92..96].try_into().unwrap());
-
-        // FIXME: Need to check for wrapping errors
-        if bytes.len() != HEADER_LENGTH + sig_len as usize {
-            return Err(EspressifWifiFrameDecodingError::InvalidLength);
-        }
-
         let mut frame = EspressifWifiFrame::default();
+        const HEADER_SIZE: usize = 48;
+        let header = &bytes[..HEADER_SIZE];
+        let bits = header.view_bits::<bv::LocalBits>();
 
         // TODO: Return all errors by coercing to a common error type somehow, instead of panicking
-        frame.header.rssi = i32::from_be_bytes(bytes[0..4].try_into().unwrap());
-        frame.header.rate = u32::from_be_bytes(bytes[4..8].try_into().unwrap());
-        frame.header.sig_mode = u32::from_be_bytes(bytes[12..16].try_into().unwrap()).try_into()?;
-        frame.header.mcs = u32::from_be_bytes(bytes[20..24].try_into().unwrap());
-        frame.header.cwb = u32::from_be_bytes(bytes[24..28].try_into().unwrap()).try_into()?;
-        frame.header.smoothing =
-            u32::from_be_bytes(bytes[32..36].try_into().unwrap()).try_into()?;
-        frame.header.ppdu_type =
-            u32::from_be_bytes(bytes[36..40].try_into().unwrap()).try_into()?;
-        frame.header.aggregation =
-            u32::from_be_bytes(bytes[44..48].try_into().unwrap()).try_into()?;
-        frame.header.stbc = u32::from_be_bytes(bytes[48..52].try_into().unwrap()).try_into()?;
-        frame.header.fec_coding = u32::from_be_bytes(bytes[52..56].try_into().unwrap());
-        frame.header.gi = u32::from_be_bytes(bytes[56..60].try_into().unwrap()).try_into()?;
-        frame.header.noise_floor = i32::from_be_bytes(bytes[56..60].try_into().unwrap());
-        frame.header.ampdu_cnt = u32::from_be_bytes(bytes[60..64].try_into().unwrap());
-        frame.header.channel = u32::from_be_bytes(bytes[64..68].try_into().unwrap());
-        frame.header.secondary_channel = u32::from_be_bytes(bytes[68..72].try_into().unwrap());
-        frame.header.timestamp_us = u32::from_be_bytes(bytes[76..80].try_into().unwrap());
-        frame.header.ant = u32::from_be_bytes(bytes[88..92].try_into().unwrap());
-        frame.header.sig_len = sig_len;
-        frame.header.rx_state = u32::from_be_bytes(bytes[100..104].try_into().unwrap());
+        frame.header.rssi = bits[0..8].load::<i32>();
+        frame.header.rate = bits[8..13].load::<u32>();
+        frame.header.sig_mode = bits[14..16].load::<u32>().try_into()?;
+        frame.header.mcs = bits[14..21].load::<u32>();
+        frame.header.cwb = bits[39..40].load::<u32>().try_into()?;
+        frame.header.smoothing = bits[56..57].load::<u32>().try_into()?;
+        frame.header.ppdu_type = bits[57..58].load::<u32>().try_into()?;
+        frame.header.aggregation = bits[59..60].load::<u32>().try_into()?;
+        frame.header.stbc = bits[60..62].load::<u32>().try_into()?;
+        frame.header.fec_coding = bits[62..63].load::<u32>();
+        frame.header.gi = bits[63..64].load::<u32>().try_into()?;
+        frame.header.noise_floor = bits[160..168].load::<i32>();
+        frame.header.ampdu_cnt = bits[72..80].load::<u32>();
+        frame.header.channel = bits[80..84].load::<u32>();
+        frame.header.secondary_channel = bits[84..88].load::<u32>();
+        frame.header.timestamp_us = bits[96..128].load::<u32>();
+        frame.header.ant = bits[255..256].load::<u32>();
+        frame.header.sig_len = bits[352..364].load::<u32>();
+        frame.header.rx_state = bits[376..384].load::<u32>();
 
-        frame.data = Vec::from(&bytes[104..]);
+        frame.data = Vec::from(&bytes[HEADER_SIZE..]);
 
         Ok(frame)
     }

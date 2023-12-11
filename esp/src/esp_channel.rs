@@ -8,11 +8,9 @@ use cope::packet::Packet;
 use cope_config::types::{mac_address::MacAddress, node_id::NodeID};
 
 use esp_idf_svc::sys::{
-    esp_err_t, esp_wifi_internal_free_rx_buffer, esp_wifi_internal_reg_rxcb,
     esp_wifi_set_promiscuous_rx_cb, wifi_promiscuous_pkt_type_t,
     wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL, wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA,
     wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT, wifi_promiscuous_pkt_type_t_WIFI_PKT_MISC, EspError,
-    ESP_OK,
 };
 use esp_idf_svc::{
     espnow::{EspNow, PeerInfo, SendStatus},
@@ -69,7 +67,7 @@ impl From<wifi_promiscuous_pkt_type_t> for PromiscuousPktType {
 
 #[allow(clippy::type_complexity)]
 static mut PROMISCUOUS_RX_CALLBACK: Option<
-    Box<dyn FnMut(&[u8], PromiscuousPktType) -> Result<(), EspError> + 'static>,
+    Box<dyn FnMut(EspressifWifiFrame, PromiscuousPktType) -> Result<(), EspError> + 'static>,
 > = None;
 
 impl EspChannel {
@@ -95,35 +93,52 @@ impl EspChannel {
     }
 
     unsafe extern "C" fn handle_promiscuous_rx(
-        // FIXME: Figure out the correct parameters
         buf: *mut ffi::c_void,
         pkt_type: wifi_promiscuous_pkt_type_t,
     ) {
-        // NOTE: There has to be a safer way to do this.
-        const HEADER_LENGTH: usize = 108;
-        let header = core::slice::from_raw_parts(buf as *mut _, HEADER_LENGTH);
-        let sig_len = u32::from_be_bytes(header[92..96].try_into().unwrap());
+        // NOTE: There has to be a better way to do this.
+        // It would be nice to just be able to transmute
+        // from buf to a wifi_promiscuous_pkt_t, but that
+        // is not possible because buf is not sized. The
+        // internal representation in memory is probably
+        // different as well.
+        const HEADER_SIZE: usize = 48;
+        let header = core::slice::from_raw_parts(buf as *mut u8, HEADER_SIZE);
+        let payload_len = ((header[44] as u16) << 4) | (header[45] as u16 >> 4);
+        let complete_buffer =
+            core::slice::from_raw_parts(buf as *mut u8, HEADER_SIZE + payload_len as usize);
+
         let _ = PROMISCUOUS_RX_CALLBACK.as_mut().unwrap()(
-            core::slice::from_raw_parts(buf as *mut _, HEADER_LENGTH + sig_len as usize),
+            complete_buffer.try_into().unwrap(),
             pkt_type.try_into().unwrap(),
         );
     }
 
     fn set_promiscuous_rx_callback<'a, R>(&'a mut self, mut rx_callback: R) -> Result<(), EspError>
     where
-        R: FnMut(&[u8], PromiscuousPktType) -> Result<(), EspError> + Send + 'static,
+        R: FnMut(EspressifWifiFrame, PromiscuousPktType) -> Result<(), EspError> + Send + 'static,
     {
         let _ = self.wifi_driver.disconnect();
         let _ = self.wifi_driver.stop();
 
         #[allow(clippy::type_complexity)]
         let rx_callback: Box<
-            Box<dyn FnMut(&[u8], PromiscuousPktType) -> Result<(), EspError> + Send + 'a>,
-        > = Box::new(Box::new(move |data, pkt_type| rx_callback(data, pkt_type)));
+            Box<
+                dyn FnMut(EspressifWifiFrame, PromiscuousPktType) -> Result<(), EspError>
+                    + Send
+                    + 'a,
+            >,
+        > = Box::new(Box::new(move |frame, pkt_type| {
+            rx_callback(frame, pkt_type)
+        }));
 
         #[allow(clippy::type_complexity)]
         let rx_callback: Box<
-            Box<dyn FnMut(&[u8], PromiscuousPktType) -> Result<(), EspError> + Send + 'static>,
+            Box<
+                dyn FnMut(EspressifWifiFrame, PromiscuousPktType) -> Result<(), EspError>
+                    + Send
+                    + 'static,
+            >,
         > = unsafe { core::mem::transmute(rx_callback) };
 
         unsafe {
@@ -139,17 +154,14 @@ impl EspChannel {
 
     pub fn initialize(&mut self) {
         let rx_queue_clone = self.rx_queue.clone();
-        let rx_callback = move |bytes: &[u8], _pkt_type: PromiscuousPktType| {
-            if let Ok(wifi_frame) = EspressifWifiFrame::try_from(bytes) {
-                if let Ok(espnow_frame) = EspNowFrame::try_from(wifi_frame.get_data()) {
-                    match Packet::deserialize_from(espnow_frame.get_body()) {
-                        Ok(p) => rx_queue_clone.lock().unwrap().push_back(p),
-                        Err(e) => log::warn!("Could not decode received packet: {}", e),
-                    };
-                }
+        let rx_callback = move |wifi_frame: EspressifWifiFrame, _pkt_type: PromiscuousPktType| {
+            if let Ok(espnow_frame) = EspNowFrame::try_from(wifi_frame.get_data()) {
+                match Packet::deserialize_from(espnow_frame.get_body()) {
+                    Ok(p) => rx_queue_clone.lock().unwrap().push_back(p),
+                    Err(e) => log::warn!("Could not decode received packet: {}", e),
+                };
             }
 
-            // FIXME: return an error here
             Ok(())
         };
 
