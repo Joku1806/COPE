@@ -27,6 +27,7 @@ pub struct EspNowFrame {
     organization_identifier: [u8; 3],
     random: u32,
     vendor_content: EspNowVendorContent,
+    fcs: u32,
 }
 
 pub enum EspNowDecodingError {
@@ -99,7 +100,7 @@ impl TryFrom<&[u8]> for EspNowFrame {
 
         decoded.vendor_content.length = bytes[33];
 
-        if decoded.vendor_content.length as usize != bytes.len() - 34 {
+        if decoded.vendor_content.length as usize != bytes.len() - 38 {
             return Err(Self::Error::InvalidLength);
         }
 
@@ -117,7 +118,15 @@ impl TryFrom<&[u8]> for EspNowFrame {
         }
 
         decoded.vendor_content.version = bytes[38];
-        decoded.vendor_content.body = Vec::from(&bytes[39..]);
+        let vc_start = 39 as usize;
+        let vc_stop = vc_start + decoded.vendor_content.length as usize - 5;
+        decoded.vendor_content.body = Vec::from(&bytes[vc_start..vc_stop]);
+
+        let fcs_start = vc_stop;
+        decoded.fcs = bytes[fcs_start] as u32
+            | ((bytes[fcs_start + 1] as u32) << 8)
+            | ((bytes[fcs_start + 2] as u32) << 16)
+            | ((bytes[fcs_start + 3] as u32) << 24);
 
         Ok(decoded)
     }
