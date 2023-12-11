@@ -186,7 +186,7 @@ impl TryFrom<&[u8]> for EspressifWifiFrame {
         let mut frame = EspressifWifiFrame::default();
         const HEADER_SIZE: usize = 48;
         let header = &bytes[..HEADER_SIZE];
-        let bits = header.view_bits::<bv::LocalBits>();
+        let bits = header.view_bits::<bv::Lsb0>();
 
         // TODO: Return all errors by coercing to a common error type somehow, instead of panicking
         frame.header.rssi = bits[0..8].load::<i32>();

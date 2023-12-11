@@ -2,6 +2,9 @@ use core::ffi;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
+use bitvec::field::BitField;
+use bitvec::prelude as bv;
+use bitvec::view::BitView;
 use cope::channel::{Channel, ChannelError};
 use cope::config::CONFIG;
 use cope::packet::Packet;
@@ -104,9 +107,9 @@ impl EspChannel {
         // different as well.
         const HEADER_SIZE: usize = 48;
         let header = core::slice::from_raw_parts(buf as *mut u8, HEADER_SIZE);
-        let payload_len = ((header[44] as u16) << 4) | (header[45] as u16 >> 4);
-        let complete_buffer =
-            core::slice::from_raw_parts(buf as *mut u8, HEADER_SIZE + payload_len as usize);
+        let bits = header.view_bits::<bv::Lsb0>();
+        let sig_len = bits[352..364].load::<usize>();
+        let complete_buffer = core::slice::from_raw_parts(buf as *mut u8, HEADER_SIZE + sig_len);
 
         let _ = PROMISCUOUS_RX_CALLBACK.as_mut().unwrap()(
             complete_buffer.try_into().unwrap(),
