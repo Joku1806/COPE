@@ -233,3 +233,9 @@ impl TryFrom<&[u8]> for EspressifWifiFrame {
         Ok(frame)
     }
 }
+
+impl EspressifWifiFrame {
+    pub fn get_data(&self) -> &[u8] {
+        self.data.as_slice()
+    }
+}

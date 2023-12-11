@@ -23,7 +23,8 @@ use esp_idf_svc::{
     wifi::{EspWifi, WifiDeviceId},
 };
 
-use crate::espnow_frame;
+use crate::espnow_frame::EspNowFrame;
+use crate::espressif_wifi_frame::EspressifWifiFrame;
 
 pub struct EspChannel {
     // NOTE: We do not access the WiFi Driver after initialize(),
@@ -139,13 +140,16 @@ impl EspChannel {
     pub fn initialize(&mut self) {
         let rx_queue_clone = self.rx_queue.clone();
         let rx_callback = move |bytes: &[u8], _pkt_type: PromiscuousPktType| {
-            if let Ok(frame) = espnow_frame::EspNowFrame::try_from(bytes) {
-                match Packet::deserialize_from(frame.get_body()) {
-                    Ok(p) => rx_queue_clone.lock().unwrap().push_back(p),
-                    Err(e) => log::warn!("Could not decode received packet: {}", e),
-                };
+            if let Ok(wifi_frame) = EspressifWifiFrame::try_from(bytes) {
+                if let Ok(espnow_frame) = EspNowFrame::try_from(wifi_frame.get_data()) {
+                    match Packet::deserialize_from(espnow_frame.get_body()) {
+                        Ok(p) => rx_queue_clone.lock().unwrap().push_back(p),
+                        Err(e) => log::warn!("Could not decode received packet: {}", e),
+                    };
+                }
             }
 
+            // FIXME: return an error here
             Ok(())
         };
 
