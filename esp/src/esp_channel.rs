@@ -11,9 +11,10 @@ use cope::packet::Packet;
 use cope_config::types::{mac_address::MacAddress, node_id::NodeID};
 
 use esp_idf_svc::sys::{
-    esp_wifi_set_promiscuous_rx_cb, wifi_promiscuous_pkt_type_t,
-    wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL, wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA,
-    wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT, wifi_promiscuous_pkt_type_t_WIFI_PKT_MISC, EspError,
+    esp_wifi_set_promiscuous_filter, esp_wifi_set_promiscuous_rx_cb, wifi_promiscuous_filter_t,
+    wifi_promiscuous_pkt_type_t, wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL,
+    wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA, wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT,
+    wifi_promiscuous_pkt_type_t_WIFI_PKT_MISC, EspError, WIFI_PROMIS_FILTER_MASK_ALL,
 };
 use esp_idf_svc::{
     espnow::{EspNow, PeerInfo, SendStatus},
@@ -169,6 +170,12 @@ impl EspChannel {
             Ok(())
         };
 
+        unsafe {
+            let filter = wifi_promiscuous_filter_t {
+                filter_mask: WIFI_PROMIS_FILTER_MASK_ALL,
+            };
+            esp!(esp_wifi_set_promiscuous_filter(&filter)).unwrap();
+        }
         self.set_promiscuous_rx_callback(rx_callback).unwrap();
 
         // NOTE: These are all init function calls I could find in the espnow examples
