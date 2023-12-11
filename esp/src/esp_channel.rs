@@ -37,6 +37,7 @@ pub struct EspChannel {
     rx_queue: Arc<Mutex<VecDeque<Packet>>>,
 }
 
+#[derive(Debug)]
 enum PromiscuousPktType {
     ManagementFrame,
     ControlFrame,
