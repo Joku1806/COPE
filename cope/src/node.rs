@@ -7,6 +7,7 @@ use super::packet_pool::{PacketPool, SimplePacketPool};
 use crate::config::CONFIG;
 use crate::kbase::{KBase, SimpleKBase};
 use crate::packet::{Packet, PacketBuilder, PacketData};
+use crate::stats::Stats;
 use crate::topology::Topology;
 use crate::traffic_generator::greedy_strategy::GreedyStrategy;
 use crate::traffic_generator::none_strategy::NoneStrategy;
@@ -28,6 +29,9 @@ pub struct Node {
     packet_pool: SimplePacketPool,
     last_fifo_flush: std::time::Instant,
     kbase: SimpleKBase,
+    stats: Stats,
+    last_stat_write: std::time::Instant,
+    use_coding: bool,
 }
 
 impl Node {
@@ -45,7 +49,6 @@ impl Node {
         let tx_whitelist = CONFIG
             .get_tx_whitelist_for(id)
             .expect("Config should contain tx whitelist");
-        eprintln!("{:?}:{:?}", &id, &tx_whitelist);
 
         let tgt = CONFIG
             .get_generator_type_for(id)
@@ -63,6 +66,11 @@ impl Node {
 
         let generator = TrafficGenerator::new(strategy, tx_whitelist.clone(), id);
 
+        let stats = match Stats::new(id, std::time::Duration::from_secs(30)) {
+            Ok(s) => s,
+            Err(e) => panic!("Error writing log file: {}", e),
+        };
+
         Node {
             id,
             topology: Topology::new(id, CONFIG.relay, rx_whitelist),
@@ -73,6 +81,9 @@ impl Node {
             last_fifo_flush: std::time::Instant::now(),
             packet_pool: SimplePacketPool::new(MAX_PACKET_POOL_SIZE),
             kbase: SimpleKBase::new(tx_whitelist.clone(), MAX_PACKET_POOL_SIZE),
+            stats,
+            last_stat_write: std::time::Instant::now(),
+            use_coding: true,
         }
     }
 
@@ -81,12 +92,15 @@ impl Node {
             true => self.tick_relay(),
             false => self.tick_leaf_node(),
         };
+
+        self.stats.record();
     }
 
     fn tick_relay(&mut self) {
         // receive
         if let Some(packet) = self.channel.receive() {
             log::info!("[Relay {}]: Recieved {:?}", self.id, packet.coding_header());
+            self.stats.add_rec(&packet);
             // TODO: extract acks ment for retransmission event
             // TODO: extract reception reports
             let coding_info = packet.coding_header().first().unwrap();
@@ -100,14 +114,18 @@ impl Node {
                 self.packet_pool.size(),
                 self.kbase.size()
             );
+            return;
         }
 
         // NOTE: we always take some time before we flush fifo to enable coding opportunities
-        let time_elapsed = self.last_fifo_flush.elapsed();
-        if time_elapsed < std::time::Duration::from_millis(800) {
+        // let  time_elapsed = self.last_fifo_flush.elapsed();
+        // if time_elapsed < std::time::Duration::from_millis(800)
+        // // || self.packet_pool.size() >= 2
+        // { return; }
+        // self.last_fifo_flush = std::time::Instant::now();
+        if !(self.packet_pool.size() >= 2) {
             return;
         }
-        self.last_fifo_flush = std::time::Instant::now();
         log::info!("[Relay {}]: Attepts to forward packets.", self.id);
 
         // deque head of output queue
@@ -120,14 +138,16 @@ impl Node {
             log::info!("[Relay {}]: Looking for Coding Opportunities", self.id);
 
             let mut packets: Vec<(CodingInfo, PacketData)> = vec![packet];
-            for &nexthop in &self.tx_whitelist {
-                let Some(packet_i) = self.packet_pool.peek_nexthop_front(nexthop) else {
-                    continue;
-                };
+            if self.use_coding {
+                for &nexthop in &self.tx_whitelist {
+                    let Some(packet_i) = self.packet_pool.peek_nexthop_front(nexthop) else {
+                        continue;
+                    };
 
-                if self.all_nexhops_can_decode(&packets, packet_i) {
-                    let p = self.packet_pool.pop_nexthop_front(nexthop).unwrap();
-                    packets.push(p);
+                    if self.all_nexhops_can_decode(&packets, packet_i) {
+                        let p = self.packet_pool.pop_nexthop_front(nexthop).unwrap();
+                        packets.push(p);
+                    }
                 }
             }
             log::info!(
@@ -152,6 +172,7 @@ impl Node {
                 log::warn!("Got error transmitting {:?}: {}", pack, e);
             } else {
                 log::info!("[Relay {}]: Forwarded package ", self.id);
+                self.stats.add_send(&pack);
             }
         } else {
             log::info!("[Relay {}]: No Packets to forward", self.id);
@@ -199,6 +220,7 @@ impl Node {
             if let Err(e) = self.channel.transmit(&packet) {
                 log::warn!("Got error transmitting {:?}: {}", packet, e);
             }
+            self.stats.add_send(&packet);
             self.packet_pool.push_packet(packet);
             log::info!(
                 "[Node {}]: Has stored {} packages.",
@@ -210,6 +232,7 @@ impl Node {
         // receive
         if let Some(packet) = self.channel.receive() {
             if self.topology.can_receive_from(packet.sender()) {
+                self.stats.add_rec(&packet);
                 log::info!("[Node {}]: Received {:?}", self.id, packet.coding_header());
                 if packet.sender() == CONFIG.relay {
                     // decode
@@ -259,7 +282,7 @@ impl Node {
         let mut data: PacketData = packet.data().clone();
 
         for &index in &packet_indices {
-            let (_, d) = self.packet_pool.remove(index).unwrap();
+            let (_, d) = self.packet_pool.get(index).unwrap();
             data = data.xor(&d);
         }
         return Some(data);
