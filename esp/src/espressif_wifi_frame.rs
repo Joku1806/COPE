@@ -12,7 +12,7 @@ pub enum EspressifWifiFrameDecodingError {
     InvalidGuideInterval,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 enum SigMode {
     #[default]
     HT11bg,
@@ -33,7 +33,7 @@ impl TryFrom<u32> for SigMode {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 enum ChannelBandwidth {
     #[default]
     MHz20,
@@ -52,7 +52,7 @@ impl TryFrom<u32> for ChannelBandwidth {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 enum ChannelEstimateSmoothing {
     #[default]
     Recommended,
@@ -71,7 +71,7 @@ impl TryFrom<u32> for ChannelEstimateSmoothing {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 enum PPDUType {
     #[default]
     Sounding,
@@ -90,7 +90,7 @@ impl TryFrom<u32> for PPDUType {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 enum AggregationType {
     #[default]
     MPDU,
@@ -109,7 +109,7 @@ impl TryFrom<u32> for AggregationType {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 enum STBC {
     #[default]
     Yes,
@@ -128,7 +128,7 @@ impl TryFrom<u32> for STBC {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 enum GuideInterval {
     #[default]
     Short,
@@ -147,7 +147,7 @@ impl TryFrom<u32> for GuideInterval {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct RadioMetadataHeader {
     rssi: i32,
     rate: u32,
@@ -173,7 +173,7 @@ struct RadioMetadataHeader {
 
 // FIXME: This is the common header at the beginning of all promiscuous mode RX callback buffers, which is only specific to Espressif.
 // It is not part of an IEEE 802.11 Frame, this struct/file should be renamed to something else!
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct EspressifWifiFrame {
     header: RadioMetadataHeader,
     data: Vec<u8>,
