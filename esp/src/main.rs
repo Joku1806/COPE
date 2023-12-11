@@ -3,6 +3,7 @@
 
 mod esp_channel;
 mod espnow_frame;
+mod espressif_wifi_frame;
 mod test_runner;
 
 use std::time::Duration;

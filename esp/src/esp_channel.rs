@@ -35,8 +35,6 @@ pub struct EspChannel {
     rx_queue: Arc<Mutex<VecDeque<Packet>>>,
 }
 
-pub struct Newtype<T>(pub T);
-
 enum PromiscuousPktType {
     ManagementFrame,
     ControlFrame,
@@ -44,21 +42,21 @@ enum PromiscuousPktType {
     MiscalleneousFrame,
 }
 
-impl From<PromiscuousPktType> for Newtype<wifi_promiscuous_pkt_type_t> {
+impl From<PromiscuousPktType> for wifi_promiscuous_pkt_type_t {
     fn from(pkt_type: PromiscuousPktType) -> Self {
-        Newtype(match pkt_type {
+        match pkt_type {
             PromiscuousPktType::ManagementFrame => wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT,
             PromiscuousPktType::ControlFrame => wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL,
             PromiscuousPktType::DataFrame => wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA,
             PromiscuousPktType::MiscalleneousFrame => wifi_promiscuous_pkt_type_t_WIFI_PKT_MISC,
-        })
+        }
     }
 }
 
-impl From<Newtype<wifi_promiscuous_pkt_type_t>> for PromiscuousPktType {
+impl From<wifi_promiscuous_pkt_type_t> for PromiscuousPktType {
     #[allow(non_upper_case_globals)]
-    fn from(pkt_type: Newtype<wifi_promiscuous_pkt_type_t>) -> Self {
-        match pkt_type.0 {
+    fn from(pkt_type: wifi_promiscuous_pkt_type_t) -> Self {
+        match pkt_type {
             wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT => PromiscuousPktType::ManagementFrame,
             wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL => PromiscuousPktType::ControlFrame,
             wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA => PromiscuousPktType::DataFrame,
@@ -98,13 +96,15 @@ impl EspChannel {
     unsafe extern "C" fn handle_promiscuous_rx(
         // FIXME: Figure out the correct parameters
         buf: *mut ffi::c_void,
-        len: u32,
+        pkt_type: wifi_promiscuous_pkt_type_t,
     ) {
+        // NOTE: There has to be a safer way to do this.
+        const HEADER_LENGTH: usize = 108;
+        let header = core::slice::from_raw_parts(buf as *mut _, HEADER_LENGTH);
+        let sig_len = u32::from_be_bytes(header[92..96].try_into().unwrap());
         let _ = PROMISCUOUS_RX_CALLBACK.as_mut().unwrap()(
-            core::slice::from_raw_parts(buf as *mut _, len as usize),
-            // NOTE: Currently we just lie here.
-            // I don't know how we should get this information.
-            PromiscuousPktType::DataFrame,
+            core::slice::from_raw_parts(buf as *mut _, HEADER_LENGTH + sig_len as usize),
+            pkt_type.try_into().unwrap(),
         );
     }
 

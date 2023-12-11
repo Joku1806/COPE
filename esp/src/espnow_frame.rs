@@ -117,11 +117,7 @@ impl TryFrom<&[u8]> for EspNowFrame {
         }
 
         decoded.vendor_content.version = bytes[38];
-        decoded.vendor_content.body = vec![0, decoded.vendor_content.length - 5];
-
-        for b in &bytes[39..] {
-            decoded.vendor_content.body.push(*b);
-        }
+        decoded.vendor_content.body = Vec::from(&bytes[39..]);
 
         Ok(decoded)
     }
