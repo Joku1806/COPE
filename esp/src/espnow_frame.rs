@@ -30,6 +30,7 @@ pub struct EspNowFrame {
     fcs: u32,
 }
 
+#[derive(Debug)]
 pub enum EspNowDecodingError {
     InvalidLength,
     InvalidFrameControl,
