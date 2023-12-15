@@ -3,6 +3,7 @@
 
 mod esp_channel;
 mod espnow_frame;
+mod frame_collection;
 mod promiscuous_wifi;
 mod test_runner;
 mod wifi_frame;

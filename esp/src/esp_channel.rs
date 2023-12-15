@@ -1,11 +1,11 @@
-use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex};
-
+use crate::espnow_frame::EspNowFrame;
+use crate::frame_collection::{Frame, FrameCollection};
+use crate::promiscuous_wifi;
+use crate::wifi_frame::WifiFrame;
 use cope::channel::{Channel, ChannelError};
 use cope::config::CONFIG;
 use cope::packet::Packet;
 use cope_config::types::{mac_address::MacAddress, node_id::NodeID};
-
 use esp_idf_svc::{
     espnow::{EspNow, PeerInfo, SendStatus},
     eventloop::EspSystemEventLoop,
@@ -17,10 +17,12 @@ use esp_idf_svc::{
     },
     wifi::{EspWifi, WifiDeviceId},
 };
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
 
-use crate::espnow_frame::EspNowFrame;
-use crate::promiscuous_wifi;
-use crate::wifi_frame::WifiFrame;
+// TODO: Make settable from config
+const RX_DRAIN_TIME: Duration = Duration::from_millis(500);
 
 pub struct EspChannel {
     // NOTE: We do not access the WiFi Driver after initialize(),
@@ -29,7 +31,8 @@ pub struct EspChannel {
     espnow_driver: EspNow<'static>,
     own_mac: MacAddress,
     mac_map: HashMap<NodeID, MacAddress>,
-    rx_queue: Arc<Mutex<VecDeque<Packet>>>,
+    rx_buffer: Arc<Mutex<HashMap<u32, (SystemTime, FrameCollection)>>>,
+    tx_callback_done: Arc<Mutex<bool>>,
 }
 
 impl EspChannel {
@@ -46,7 +49,8 @@ impl EspChannel {
             espnow_driver,
             own_mac: mac,
             mac_map: HashMap::from(CONFIG.nodes),
-            rx_queue: Arc::new(Mutex::new(VecDeque::new())),
+            rx_buffer: Arc::new(Mutex::new(HashMap::new())),
+            tx_callback_done: Arc::new(Mutex::new(false)),
         };
     }
 
@@ -87,14 +91,36 @@ impl EspChannel {
     }
 
     fn register_callbacks(&mut self) {
-        let rx_queue_clone = self.rx_queue.clone();
+        let rx_buffer_clone = self.rx_buffer.clone();
         let rx_callback =
             move |wifi_frame: WifiFrame, _pkt_type: promiscuous_wifi::PromiscuousPktType| {
-                if let Ok(espnow_frame) = EspNowFrame::try_from(wifi_frame.get_data()) {
-                    match Packet::deserialize_from(espnow_frame.get_body()) {
-                        Ok(p) => rx_queue_clone.lock().unwrap().push_back(p),
-                        Err(e) => log::warn!("Could not decode received packet: {}", e),
-                    };
+                // TODO: Better error handling!
+                let espnow_frame = match EspNowFrame::try_from(wifi_frame.get_data()) {
+                    Ok(f) => f,
+                    Err(e) => return Ok(()),
+                };
+
+                let partial_frame = match Frame::try_from(espnow_frame.get_body()) {
+                    Ok(f) => f,
+                    Err(e) => return Ok(()),
+                };
+
+                let mut buffer = rx_buffer_clone.lock().unwrap();
+
+                if !buffer.contains_key(&partial_frame.get_magic()) {
+                    // FIXME: Find a way to drop stale entries,
+                    // if a frame of a packet could not be received and was not re-sent.
+                    // Maybe store a creation timestamp and clean the list every 500ms?
+                    buffer.insert(
+                        partial_frame.get_magic(),
+                        (SystemTime::now(), FrameCollection::new()),
+                    );
+                }
+
+                let frame_collection = buffer.get_mut(&partial_frame.get_magic()).unwrap();
+
+                if let Err(e) = frame_collection.1.add_frame(partial_frame) {
+                    log::warn!("Could not process received partial frame: {:?}", e);
                 }
 
                 Ok(())
@@ -102,12 +128,23 @@ impl EspChannel {
 
         promiscuous_wifi::set_promiscuous_rx_callback(&mut self.wifi_driver, rx_callback).unwrap();
 
+        let tx_callback_done_clone = self.tx_callback_done.clone();
         self.espnow_driver
-            .register_send_cb(|mac: &[u8], status: SendStatus| {
+            .register_send_cb(move |mac: &[u8], status: SendStatus| {
                 if matches!(status, SendStatus::FAIL) {
                     let fmt_mac = MacAddress::new(mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
                     log::warn!("Sending packet to {} failed!", fmt_mac);
                 }
+
+                let mut done = tx_callback_done_clone.lock().unwrap();
+
+                if *done {
+                    log::warn!(
+                        "TX Callback status flag was not reset after previous transmission!"
+                    );
+                }
+
+                *done = true;
             })
             .unwrap();
     }
@@ -148,6 +185,27 @@ impl EspChannel {
     pub fn get_mac(&self) -> MacAddress {
         self.own_mac
     }
+
+    fn collect_packet(&mut self) -> Option<Packet> {
+        for (_, (creation_time, collection)) in self.rx_buffer.lock().unwrap().iter() {
+            if collection.is_complete() {
+                if creation_time.elapsed().unwrap() > RX_DRAIN_TIME {
+                    log::warn!("RX Drain Time is set too low.");
+                }
+
+                // TODO: make this work without clone
+                match TryInto::<Vec<u8>>::try_into(collection.clone()) {
+                    Ok(bytes) => match Packet::deserialize_from(bytes.as_slice()) {
+                        Ok(p) => return Some(p),
+                        Err(e) => log::warn!("Could not decode received packet: {}", e),
+                    },
+                    Err(e) => log::warn!("Could not piece together frame collection: {:?}", e),
+                };
+            }
+        }
+
+        None
+    }
 }
 
 impl Channel for EspChannel {
@@ -169,25 +227,37 @@ impl Channel for EspChannel {
             log::info!("Sending {:?} to {}", packet.coding_header(), mac);
 
             let serialized = packet.serialize_into().unwrap();
-            // NOTE: How does backoff and ACKs work?
-            // Does it happen automatically or do we have to write code for it?
-            let result = self
-                .espnow_driver
-                .send(mac.into_array(), serialized.as_slice());
+            let frames = FrameCollection::try_from(serialized.as_slice()).unwrap();
 
-            return match result {
-                Ok(_) => Ok(()),
-                // FIXME: Figure out which esp_err_t codes map to our errors
-                Err(_) => Err(ChannelError::NoACK),
-            };
+            for frame in frames.iter() {
+                // TODO: Make this work without clone
+                let serialized: Vec<u8> = frame.clone().unwrap().try_into().unwrap();
+                let result = self
+                    .espnow_driver
+                    .send(mac.into_array(), serialized.as_slice());
+
+                // NOTE: We wait here until the TX callback ran and reset this flag.
+                // This is recommended practice in the esp-idf espnow guide.
+                // Apparently transmissions can fail if you send too quickly.
+                while !*self.tx_callback_done.lock().unwrap() {}
+
+                if result.is_err() {
+                    return Err(ChannelError::NoACK);
+                }
+            }
         }
 
         Ok(())
     }
 
     fn receive(&mut self) -> Option<Packet> {
-        // NOTE: We need to combine back packets here,
-        // once we allow them to be larger than the maximum EspNow Frame Size (250B).
-        self.rx_queue.lock().unwrap().pop_front()
+        self.rx_buffer
+            .lock()
+            .unwrap()
+            .retain(|_, (creation_time, collection)| {
+                creation_time.elapsed().unwrap() < RX_DRAIN_TIME || collection.is_complete()
+            });
+
+        self.collect_packet()
     }
 }
