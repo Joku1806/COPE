@@ -1,7 +1,7 @@
 use bitvec::{field::BitField, prelude as bv, view::BitView};
 
 #[derive(Debug)]
-pub enum EspressifWifiFrameDecodingError {
+pub enum WifiFrameDecodingError {
     InvalidLength,
     InvalidSigMode,
     InvalidChannelBandwidth,
@@ -21,7 +21,7 @@ enum SigMode {
 }
 
 impl TryFrom<u32> for SigMode {
-    type Error = EspressifWifiFrameDecodingError;
+    type Error = WifiFrameDecodingError;
 
     fn try_from(sig_mode: u32) -> Result<Self, Self::Error> {
         match sig_mode {
@@ -41,7 +41,7 @@ enum ChannelBandwidth {
 }
 
 impl TryFrom<u32> for ChannelBandwidth {
-    type Error = EspressifWifiFrameDecodingError;
+    type Error = WifiFrameDecodingError;
 
     fn try_from(bw: u32) -> Result<Self, Self::Error> {
         match bw {
@@ -60,7 +60,7 @@ enum ChannelEstimateSmoothing {
 }
 
 impl TryFrom<u32> for ChannelEstimateSmoothing {
-    type Error = EspressifWifiFrameDecodingError;
+    type Error = WifiFrameDecodingError;
 
     fn try_from(rec: u32) -> Result<Self, Self::Error> {
         match rec {
@@ -79,7 +79,7 @@ enum PPDUType {
 }
 
 impl TryFrom<u32> for PPDUType {
-    type Error = EspressifWifiFrameDecodingError;
+    type Error = WifiFrameDecodingError;
 
     fn try_from(ppdu_type: u32) -> Result<Self, Self::Error> {
         match ppdu_type {
@@ -98,7 +98,7 @@ enum AggregationType {
 }
 
 impl TryFrom<u32> for AggregationType {
-    type Error = EspressifWifiFrameDecodingError;
+    type Error = WifiFrameDecodingError;
 
     fn try_from(aggregation_type: u32) -> Result<Self, Self::Error> {
         match aggregation_type {
@@ -117,7 +117,7 @@ enum STBC {
 }
 
 impl TryFrom<u32> for STBC {
-    type Error = EspressifWifiFrameDecodingError;
+    type Error = WifiFrameDecodingError;
 
     fn try_from(stbc: u32) -> Result<Self, Self::Error> {
         match stbc {
@@ -136,7 +136,7 @@ enum GuideInterval {
 }
 
 impl TryFrom<u32> for GuideInterval {
-    type Error = EspressifWifiFrameDecodingError;
+    type Error = WifiFrameDecodingError;
 
     fn try_from(interval: u32) -> Result<Self, Self::Error> {
         match interval {
@@ -174,16 +174,16 @@ struct RadioMetadataHeader {
 // FIXME: This is the common header at the beginning of all promiscuous mode RX callback buffers, which is only specific to Espressif.
 // It is not part of an IEEE 802.11 Frame, this struct/file should be renamed to something else!
 #[derive(Default, Debug)]
-pub struct EspressifWifiFrame {
+pub struct WifiFrame {
     header: RadioMetadataHeader,
     data: Vec<u8>,
 }
 
-impl TryFrom<&[u8]> for EspressifWifiFrame {
-    type Error = EspressifWifiFrameDecodingError;
+impl TryFrom<&[u8]> for WifiFrame {
+    type Error = WifiFrameDecodingError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        let mut frame = EspressifWifiFrame::default();
+        let mut frame = WifiFrame::default();
         const HEADER_SIZE: usize = 48;
         let header = &bytes[..HEADER_SIZE];
         let bits = header.view_bits::<bv::Lsb0>();
@@ -215,7 +215,7 @@ impl TryFrom<&[u8]> for EspressifWifiFrame {
     }
 }
 
-impl EspressifWifiFrame {
+impl WifiFrame {
     pub fn get_data(&self) -> &[u8] {
         self.data.as_slice()
     }

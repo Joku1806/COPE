@@ -1,32 +1,26 @@
-use core::ffi;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
-use bitvec::field::BitField;
-use bitvec::prelude as bv;
-use bitvec::view::BitView;
 use cope::channel::{Channel, ChannelError};
 use cope::config::CONFIG;
 use cope::packet::Packet;
 use cope_config::types::{mac_address::MacAddress, node_id::NodeID};
 
-use esp_idf_svc::sys::{
-    esp_wifi_set_promiscuous_filter, esp_wifi_set_promiscuous_rx_cb, wifi_promiscuous_filter_t,
-    wifi_promiscuous_pkt_type_t, wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL,
-    wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA, wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT,
-    wifi_promiscuous_pkt_type_t_WIFI_PKT_MISC, EspError, WIFI_PROMIS_FILTER_MASK_ALL,
-};
 use esp_idf_svc::{
     espnow::{EspNow, PeerInfo, SendStatus},
     eventloop::EspSystemEventLoop,
     hal::modem::Modem,
     nvs::EspDefaultNvsPartition,
-    sys::{esp, wifi_mode_t_WIFI_MODE_STA, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE},
+    sys::{
+        esp, esp_wifi_set_promiscuous_filter, wifi_mode_t_WIFI_MODE_STA, wifi_promiscuous_filter_t,
+        wifi_second_chan_t_WIFI_SECOND_CHAN_NONE, WIFI_PROMIS_FILTER_MASK_ALL,
+    },
     wifi::{EspWifi, WifiDeviceId},
 };
 
 use crate::espnow_frame::EspNowFrame;
-use crate::espressif_wifi_frame::EspressifWifiFrame;
+use crate::promiscuous_wifi;
+use crate::wifi_frame::WifiFrame;
 
 pub struct EspChannel {
     // NOTE: We do not access the WiFi Driver after initialize(),
@@ -37,43 +31,6 @@ pub struct EspChannel {
     mac_map: HashMap<NodeID, MacAddress>,
     rx_queue: Arc<Mutex<VecDeque<Packet>>>,
 }
-
-#[derive(Debug)]
-enum PromiscuousPktType {
-    ManagementFrame,
-    ControlFrame,
-    DataFrame,
-    MiscalleneousFrame,
-}
-
-impl From<PromiscuousPktType> for wifi_promiscuous_pkt_type_t {
-    fn from(pkt_type: PromiscuousPktType) -> Self {
-        match pkt_type {
-            PromiscuousPktType::ManagementFrame => wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT,
-            PromiscuousPktType::ControlFrame => wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL,
-            PromiscuousPktType::DataFrame => wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA,
-            PromiscuousPktType::MiscalleneousFrame => wifi_promiscuous_pkt_type_t_WIFI_PKT_MISC,
-        }
-    }
-}
-
-impl From<wifi_promiscuous_pkt_type_t> for PromiscuousPktType {
-    #[allow(non_upper_case_globals)]
-    fn from(pkt_type: wifi_promiscuous_pkt_type_t) -> Self {
-        match pkt_type {
-            wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT => PromiscuousPktType::ManagementFrame,
-            wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL => PromiscuousPktType::ControlFrame,
-            wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA => PromiscuousPktType::DataFrame,
-            wifi_promiscuous_pkt_type_t_WIFI_PKT_MISC => PromiscuousPktType::MiscalleneousFrame,
-            _ => panic!(),
-        }
-    }
-}
-
-#[allow(clippy::type_complexity)]
-static mut PROMISCUOUS_RX_CALLBACK: Option<
-    Box<dyn FnMut(EspressifWifiFrame, PromiscuousPktType) -> Result<(), EspError> + 'static>,
-> = None;
 
 impl EspChannel {
     pub fn new(modem: Modem) -> Self {
@@ -93,91 +50,7 @@ impl EspChannel {
         };
     }
 
-    pub fn get_mac(&self) -> MacAddress {
-        self.own_mac
-    }
-
-    unsafe extern "C" fn handle_promiscuous_rx(
-        buf: *mut ffi::c_void,
-        pkt_type: wifi_promiscuous_pkt_type_t,
-    ) {
-        // NOTE: There has to be a better way to do this.
-        // It would be nice to just be able to transmute
-        // from buf to a wifi_promiscuous_pkt_t, but that
-        // is not possible because buf is not sized. The
-        // internal representation in memory is probably
-        // different as well.
-        const HEADER_SIZE: usize = 48;
-        let header = core::slice::from_raw_parts(buf as *mut u8, HEADER_SIZE);
-        let bits = header.view_bits::<bv::Lsb0>();
-        let sig_len = bits[352..364].load::<usize>();
-        let complete_buffer = core::slice::from_raw_parts(buf as *mut u8, HEADER_SIZE + sig_len);
-
-        let _ = PROMISCUOUS_RX_CALLBACK.as_mut().unwrap()(
-            complete_buffer.try_into().unwrap(),
-            pkt_type.try_into().unwrap(),
-        );
-    }
-
-    fn set_promiscuous_rx_callback<'a, R>(&'a mut self, mut rx_callback: R) -> Result<(), EspError>
-    where
-        R: FnMut(EspressifWifiFrame, PromiscuousPktType) -> Result<(), EspError> + Send + 'static,
-    {
-        let _ = self.wifi_driver.disconnect();
-        let _ = self.wifi_driver.stop();
-
-        #[allow(clippy::type_complexity)]
-        let rx_callback: Box<
-            Box<
-                dyn FnMut(EspressifWifiFrame, PromiscuousPktType) -> Result<(), EspError>
-                    + Send
-                    + 'a,
-            >,
-        > = Box::new(Box::new(move |frame, pkt_type| {
-            rx_callback(frame, pkt_type)
-        }));
-
-        #[allow(clippy::type_complexity)]
-        let rx_callback: Box<
-            Box<
-                dyn FnMut(EspressifWifiFrame, PromiscuousPktType) -> Result<(), EspError>
-                    + Send
-                    + 'static,
-            >,
-        > = unsafe { core::mem::transmute(rx_callback) };
-
-        unsafe {
-            PROMISCUOUS_RX_CALLBACK = Some(rx_callback);
-
-            esp!(esp_wifi_set_promiscuous_rx_cb(Some(
-                Self::handle_promiscuous_rx
-            )))?;
-        }
-
-        Ok(())
-    }
-
-    pub fn initialize(&mut self) {
-        let rx_queue_clone = self.rx_queue.clone();
-        let rx_callback = move |wifi_frame: EspressifWifiFrame, _pkt_type: PromiscuousPktType| {
-            if let Ok(espnow_frame) = EspNowFrame::try_from(wifi_frame.get_data()) {
-                match Packet::deserialize_from(espnow_frame.get_body()) {
-                    Ok(p) => rx_queue_clone.lock().unwrap().push_back(p),
-                    Err(e) => log::warn!("Could not decode received packet: {}", e),
-                };
-            }
-
-            Ok(())
-        };
-
-        unsafe {
-            let filter = wifi_promiscuous_filter_t {
-                filter_mask: WIFI_PROMIS_FILTER_MASK_ALL,
-            };
-            esp!(esp_wifi_set_promiscuous_filter(&filter)).unwrap();
-        }
-        self.set_promiscuous_rx_callback(rx_callback).unwrap();
-
+    fn set_wifi_config_and_start(&mut self) {
         // NOTE: These are all init function calls I could find in the espnow examples
         // at https://github.com/espressif/esp-now/blob/master/examples.
         // Do we call all of these at some point?
@@ -195,15 +68,39 @@ impl EspChannel {
             // NOTE: We need to be in promiscuous mode to overhear unicast packets
             // not addressed to us.
             esp!(esp_idf_svc::sys::esp_wifi_set_promiscuous(true)).unwrap();
+            // FIXME: Find out if EspNow frames are always received as a specific PromiscuousPktType in promiscuous mode.
+            // This would allow us to throw away all other frames more quickly.
+            let filter = wifi_promiscuous_filter_t {
+                filter_mask: WIFI_PROMIS_FILTER_MASK_ALL,
+            };
+            esp!(esp_wifi_set_promiscuous_filter(&filter)).unwrap();
         }
         self.wifi_driver.start().unwrap();
         unsafe {
+            // TODO: Make settable through config
             esp!(esp_idf_svc::sys::esp_wifi_set_channel(
                 8,
                 wifi_second_chan_t_WIFI_SECOND_CHAN_NONE
             ))
             .unwrap();
         }
+    }
+
+    fn register_callbacks(&mut self) {
+        let rx_queue_clone = self.rx_queue.clone();
+        let rx_callback =
+            move |wifi_frame: WifiFrame, _pkt_type: promiscuous_wifi::PromiscuousPktType| {
+                if let Ok(espnow_frame) = EspNowFrame::try_from(wifi_frame.get_data()) {
+                    match Packet::deserialize_from(espnow_frame.get_body()) {
+                        Ok(p) => rx_queue_clone.lock().unwrap().push_back(p),
+                        Err(e) => log::warn!("Could not decode received packet: {}", e),
+                    };
+                }
+
+                Ok(())
+            };
+
+        promiscuous_wifi::set_promiscuous_rx_callback(&mut self.wifi_driver, rx_callback).unwrap();
 
         self.espnow_driver
             .register_send_cb(|mac: &[u8], status: SendStatus| {
@@ -213,9 +110,18 @@ impl EspChannel {
                 }
             })
             .unwrap();
+    }
+
+    pub fn initialize(&mut self) {
+        self.register_callbacks();
+        self.set_wifi_config_and_start();
 
         // NOTE: In unicast mode, the sender has to be paired with the receiver and vice versa.
         // To make sure this is guaranteed from the start, we add all unicast peers upfront.
+        // FIXME: There is a hard limit of 20 concurrent Unicast peers.
+        // If we need more than that in the future, we need to add and remove them dynamically somehow.
+        // This will be complicated, since messages can only be received correctly,
+        // if both sender and receiver have each other added as peers.
         for (_, mac) in self.mac_map.iter() {
             if *mac != self.own_mac {
                 self.add_unicast_peer(mac);
@@ -237,6 +143,10 @@ impl EspChannel {
         peer_info.ifidx = esp_idf_svc::sys::wifi_interface_t_WIFI_IF_STA;
 
         self.espnow_driver.add_peer(peer_info).unwrap();
+    }
+
+    pub fn get_mac(&self) -> MacAddress {
+        self.own_mac
     }
 }
 
