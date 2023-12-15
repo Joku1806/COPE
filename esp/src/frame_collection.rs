@@ -1,3 +1,4 @@
+use rand::prelude::*;
 use std::{cmp::min, ops::Deref};
 
 // NOTE: Maximum allowed frame size defined by EspNow
@@ -164,11 +165,20 @@ impl From<&[u8]> for FrameCollection {
         let mut collection = FrameCollection::new();
         let mut start: usize = 0;
         let mut index: u8 = 0;
+        let magic: u32 = rand::thread_rng().gen();
 
         while start < bytes.len() {
             let size = min(FRAME_MAX_SIZE, bytes.len() - start);
+            let ftype = match index {
+                // NOTE: While creating the FrameCollection, we don't exactly know
+                // how many frames it will contain. So 0 is just a placeholder
+                // and will be changed in write_frame_counter().
+                0 => FrameType::First(0),
+                _ => FrameType::Following,
+            };
             // TODO: Error handling
-            let frame = Frame::try_from(&bytes[start..start + size]).unwrap();
+            let frame =
+                Frame::new(ftype, index, magic, Vec::from(&bytes[start..start + size])).unwrap();
             collection.add_frame(frame).unwrap();
 
             if start + size > bytes.len() {

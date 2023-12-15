@@ -35,6 +35,7 @@ anyhow = { version = "1.0.75" }
 bitvec = { version = "1.0.1" }
 byte-unit = { version = "5.0.3" }
 enumset = { version = "1.1.3" }
+rand = { version = "0.8.5" }
 cope = { path = "../cope" }
 # TODO: Instead re-export types inside cope crate
 cope_config = { path = "../cope/cope_config" }
