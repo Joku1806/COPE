@@ -23,6 +23,7 @@ use std::time::{Duration, SystemTime};
 
 // TODO: Make settable from config
 const RX_DRAIN_TIME: Duration = Duration::from_millis(500);
+const ESPNOW_FRAME_SIZE: usize = 250;
 
 pub struct EspChannel {
     // NOTE: We do not access the WiFi Driver after initialize(),
@@ -194,7 +195,7 @@ impl EspChannel {
                 }
 
                 // TODO: make this work without clone
-                match TryInto::<Vec<u8>>::try_into(collection.clone()) {
+                match collection.decode() {
                     Ok(bytes) => match Packet::deserialize_from(bytes.as_slice()) {
                         Ok(p) => return Some(p),
                         Err(e) => log::warn!("Could not decode received packet: {}", e),
@@ -227,7 +228,10 @@ impl Channel for EspChannel {
             log::info!("Sending {:?} to {}", packet.coding_header(), mac);
 
             let serialized = packet.serialize_into().unwrap();
-            let frames = FrameCollection::try_from(serialized.as_slice()).unwrap();
+            let mut frames = FrameCollection::new()
+                .with_frame_size(ESPNOW_FRAME_SIZE)
+                .unwrap();
+            frames.encode(serialized.as_slice()).unwrap();
 
             for frame in frames.iter() {
                 // TODO: Make this work without clone

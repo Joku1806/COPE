@@ -1,26 +1,27 @@
 use rand::prelude::*;
 use std::{cmp::min, ops::Deref};
 
-// NOTE: Maximum allowed frame size defined by EspNow
-const FRAME_MAX_SIZE: usize = 250;
-const FRAME_HEADER_SIZE: usize = 6;
+const FIRST_FRAME_HEADER_SIZE: usize = 7;
+const FOLLOWING_FRAME_HEADER_SIZE: usize = 6;
 
 #[derive(Debug)]
 pub enum FrameCollectionError {
     FrameMissing,
     FrameAlreadyAdded,
+    InvalidFrameSize,
 }
 
+// NOTE: Maybe it would be better if each frame contained
+// the index and length, not just the first frame.
 #[derive(PartialEq, Clone)]
 pub enum FrameType {
-    First(u8),
+    First((u8, u8)),
     Following,
 }
 
 #[derive(Debug)]
 pub enum FrameError {
     InvalidHeader,
-    InvalidDataLength,
 }
 
 #[derive(PartialEq, Clone)]
@@ -32,22 +33,13 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub fn new(
-        ftype: FrameType,
-        index: u8,
-        magic: u32,
-        data: Vec<u8>,
-    ) -> Result<Frame, FrameError> {
-        if data.len() + FRAME_HEADER_SIZE > FRAME_MAX_SIZE {
-            return Err(FrameError::InvalidDataLength);
-        }
-
-        Ok(Frame {
+    pub fn new(ftype: FrameType, index: u8, magic: u32, data: Vec<u8>) -> Frame {
+        Frame {
             ftype,
             index,
             magic,
             data,
-        })
+        }
     }
 
     pub fn get_magic(&self) -> u32 {
@@ -59,51 +51,61 @@ impl TryFrom<&[u8]> for Frame {
     type Error = FrameError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        if bytes.len() < FRAME_HEADER_SIZE {
+        // FIXME: This check does not work anymore, now that there are two different header sizes. We first need to determine
+        if bytes.len() < FOLLOWING_FRAME_HEADER_SIZE {
             return Err(FrameError::InvalidHeader);
         }
 
-        if bytes.len() > FRAME_MAX_SIZE {
-            return Err(FrameError::InvalidDataLength);
-        }
+        let magic = u32::from_be_bytes(bytes[0..4].try_into().unwrap());
 
-        let ftype = match bytes[0] {
-            0 => FrameType::First(bytes[1]),
+        let ftype = match bytes[5] {
+            0 => FrameType::First((bytes[6], bytes[7])),
             1 => FrameType::Following,
             _ => return Err(FrameError::InvalidHeader),
         };
 
         let index = match ftype {
             FrameType::First(_) => 0,
-            FrameType::Following => bytes[1],
+            FrameType::Following => bytes[6],
         };
 
-        let magic = u32::from_be_bytes(bytes[2..6].try_into().unwrap());
+        let data_start = match ftype {
+            FrameType::First(_) => FIRST_FRAME_HEADER_SIZE,
+            FrameType::Following => FOLLOWING_FRAME_HEADER_SIZE,
+        };
 
         Ok(Frame {
             ftype,
             index,
             magic,
-            data: bytes[FRAME_HEADER_SIZE..].to_vec(),
+            data: bytes[data_start..].to_vec(),
         })
     }
 }
 
 impl Into<Vec<u8>> for Frame {
     fn into(self) -> Vec<u8> {
-        let mut v = vec![0; FRAME_HEADER_SIZE];
+        let mut v = match self.ftype {
+            FrameType::First(_) => vec![0; FIRST_FRAME_HEADER_SIZE],
+            FrameType::Following => vec![0; FOLLOWING_FRAME_HEADER_SIZE],
+        };
 
-        v[0] = match self.ftype {
+        v[0..4].clone_from_slice(&u32::to_be_bytes(self.magic));
+
+        v[5] = match self.ftype {
             FrameType::First(_) => 0,
             FrameType::Following => 1,
         };
 
-        v[1] = match self.ftype {
-            FrameType::First(total) => total,
+        v[6] = match self.ftype {
+            FrameType::First((frame_count, _)) => frame_count,
+            // NOTE: Store inside enum member, like above?
             FrameType::Following => self.index,
         };
 
-        v[2..6].clone_from_slice(&u32::to_be_bytes(self.magic));
+        if let FrameType::First((_, frame_size)) = self.ftype {
+            v.push(frame_size);
+        }
 
         v.extend(self.data);
 
@@ -113,12 +115,37 @@ impl Into<Vec<u8>> for Frame {
 
 #[derive(Clone)]
 pub struct FrameCollection {
+    // NOTE: Check if we can just store Vec<Frame>.
+    // We would need to check insertion behaviour for that.
     frames: Vec<Option<Frame>>,
+    frame_size: Option<usize>,
+    magic: Option<u32>,
 }
 
 impl FrameCollection {
     pub fn new() -> FrameCollection {
-        FrameCollection { frames: Vec::new() }
+        FrameCollection {
+            frames: Vec::new(),
+            frame_size: None,
+            magic: None,
+        }
+    }
+
+    pub fn with_frame_size(
+        mut self,
+        frame_size: usize,
+    ) -> Result<FrameCollection, FrameCollectionError> {
+        if frame_size < FOLLOWING_FRAME_HEADER_SIZE {
+            return Err(FrameCollectionError::InvalidFrameSize);
+        }
+
+        self.frame_size = Some(frame_size);
+        Ok(self)
+    }
+
+    pub fn with_magic(mut self, magic: u32) -> FrameCollection {
+        self.magic = Some(magic);
+        self
     }
 
     pub fn add_frame(&mut self, frame: Frame) -> Result<(), FrameCollectionError> {
@@ -129,8 +156,8 @@ impl FrameCollection {
         }
 
         match frame.ftype {
-            FrameType::First(total) => {
-                self.frames.resize_with(total as usize, || None);
+            FrameType::First((frame_count, _)) => {
+                self.frames.resize_with(frame_count as usize, || None);
             }
             FrameType::Following => (),
         };
@@ -140,11 +167,13 @@ impl FrameCollection {
         Ok(())
     }
 
-    pub fn write_frame_counter(&mut self) {
+    pub fn write_first_frame_info(&mut self) {
+        // FIXME: Return error instead
         assert!(
             self.is_complete(),
             "Can only be called on completed frame collection",
         );
+        // TODO: Needs to be removed, once we switch to storing the frame size instead.
         assert!(
             self.frames.len() < u8::MAX.into(),
             "We only support single byte frame lengths"
@@ -152,63 +181,72 @@ impl FrameCollection {
 
         let length = self.frames.len() as u8;
         let first = self.frames[0].as_mut().unwrap();
-        first.ftype = FrameType::First(length);
+        first.ftype = FrameType::First((length, self.frame_size.unwrap().try_into().unwrap()));
     }
 
     pub fn is_complete(&self) -> bool {
         return !self.frames.is_empty() && !self.frames.contains(&None);
     }
-}
 
-impl From<&[u8]> for FrameCollection {
-    fn from(bytes: &[u8]) -> Self {
-        let mut collection = FrameCollection::new();
+    // NOTE: Encodes from flat packet representation to FrameCollection
+    pub fn encode(&mut self, bytes: &[u8]) -> Result<(), FrameCollectionError> {
+        if !self.frames.is_empty() {
+            return Err(FrameCollectionError::FrameAlreadyAdded);
+        }
+
         let mut start: usize = 0;
         let mut index: u8 = 0;
-        let magic: u32 = rand::thread_rng().gen();
+        let magic: u32 = match self.magic {
+            None => rand::thread_rng().gen(),
+            Some(m) => m,
+        };
 
         while start < bytes.len() {
-            let size = min(FRAME_MAX_SIZE, bytes.len() - start);
             let ftype = match index {
                 // NOTE: While creating the FrameCollection, we don't exactly know
                 // how many frames it will contain. So 0 is just a placeholder
-                // and will be changed in write_frame_counter().
-                0 => FrameType::First(0),
+                // and will be changed in write_first_frame_info().
+                0 => FrameType::First((0, 0)),
                 _ => FrameType::Following,
             };
+
+            let header_size = match ftype {
+                FrameType::First(_) => FIRST_FRAME_HEADER_SIZE,
+                FrameType::Following => FOLLOWING_FRAME_HEADER_SIZE,
+            };
+
+            // NOTE: To be sure that the entire encoded frame will frame_size bytes long,
+            // we need to subtract the header size beforehand.
+            let size = min(self.frame_size.unwrap() - header_size, bytes.len() - start);
+
             // TODO: Error handling
-            let frame =
-                Frame::new(ftype, index, magic, Vec::from(&bytes[start..start + size])).unwrap();
-            collection.add_frame(frame).unwrap();
+            let frame = Frame::new(ftype, index, magic, Vec::from(&bytes[start..start + size]));
+            self.add_frame(frame).unwrap();
 
             if start + size > bytes.len() {
-                collection.write_frame_counter();
+                self.write_first_frame_info();
             }
 
             start += size;
             index += 1;
         }
 
-        collection
+        Ok(())
     }
-}
 
-impl TryInto<Vec<u8>> for FrameCollection {
-    type Error = FrameCollectionError;
+    // NOTE: Decodes from FrameCollection to flat packet representation
+    pub fn decode(&self) -> Result<Vec<u8>, FrameCollectionError> {
+        let mut decoded = Vec::new();
 
-    fn try_into(self) -> Result<Vec<u8>, Self::Error> {
         if !self.is_complete() {
-            return Err(Self::Error::FrameMissing);
+            return Err(FrameCollectionError::FrameMissing);
         }
-
-        let mut encoded = Vec::new();
 
         for frame in self.frames.iter() {
-            // TODO: Get this to work without cloning
-            encoded.extend::<Vec<u8>>(frame.clone().unwrap().into());
+            decoded.extend(frame.clone().unwrap().data);
         }
 
-        Ok(encoded)
+        Ok(decoded)
     }
 }
 
