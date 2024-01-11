@@ -66,10 +66,32 @@ unsafe extern "C" fn handle_promiscuous_rx(
     let sig_len = bits[352..364].load::<usize>();
     let complete_buffer = core::slice::from_raw_parts(buf as *mut u8, HEADER_SIZE + sig_len);
 
-    let _ = PROMISCUOUS_RX_CALLBACK.as_mut().unwrap()(
-        complete_buffer.try_into().unwrap(),
-        pkt_type.try_into().unwrap(),
-    );
+    let rs_cb = match PROMISCUOUS_RX_CALLBACK.as_mut() {
+        Some(cb) => cb,
+        None => {
+            log::warn!("No promiscuous WiFi callback registered!");
+            return;
+        }
+    };
+
+    let rs_frame: WifiFrame = match complete_buffer.try_into() {
+        Ok(f) => f,
+        Err(e) => {
+            log::warn!("Not a valid WiFi frame: {:?}", e);
+            return;
+        }
+    };
+
+    let rs_pkt_type = match pkt_type.try_into() {
+        Ok(pt) => pt,
+        Err(e) => {
+            log::warn!("Not a valid packet type: {:?}", e);
+            return;
+        }
+    };
+
+    // TODO: Be able to return error here instead of quietly failing
+    let _ = rs_cb(rs_frame, rs_pkt_type);
 }
 
 pub fn set_promiscuous_rx_callback<'a, R>(

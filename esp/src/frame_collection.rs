@@ -9,6 +9,7 @@ pub enum FrameCollectionError {
     FrameMissing,
     FrameAlreadyAdded,
     InvalidFrameSize,
+    InvalidFrameCount(usize),
 }
 
 // NOTE: Maybe it would be better if each frame contained
@@ -56,7 +57,11 @@ impl TryFrom<&[u8]> for Frame {
             return Err(FrameError::InvalidHeader);
         }
 
-        let magic = u32::from_be_bytes(bytes[0..4].try_into().unwrap());
+        let magic_bytes = match bytes[0..4].try_into() {
+            Ok(m) => m,
+            Err(_) => return Err(FrameError::InvalidHeader),
+        };
+        let magic = u32::from_be_bytes(magic_bytes);
 
         let ftype = match bytes[5] {
             0 => FrameType::First((bytes[6], bytes[7])),
@@ -167,21 +172,33 @@ impl FrameCollection {
         Ok(())
     }
 
-    pub fn write_first_frame_info(&mut self) {
-        // FIXME: Return error instead
-        assert!(
-            self.is_complete(),
-            "Can only be called on completed frame collection",
-        );
-        // TODO: Needs to be removed, once we switch to storing the frame size instead.
-        assert!(
-            self.frames.len() < u8::MAX.into(),
-            "We only support single byte frame lengths"
-        );
+    pub fn write_first_frame_info(&mut self) -> Result<(), FrameCollectionError> {
+        if !self.is_complete() {
+            return Err(FrameCollectionError::FrameMissing);
+        }
 
-        let length = self.frames.len() as u8;
-        let first = self.frames[0].as_mut().unwrap();
-        first.ftype = FrameType::First((length, self.frame_size.unwrap().try_into().unwrap()));
+        let frame_count: u8 = match self.frames.len().try_into() {
+            Ok(fc) => fc,
+            Err(_) => return Err(FrameCollectionError::InvalidFrameCount(self.frames.len())),
+        };
+
+        // TODO: Better error handling
+        let frame_size = match self.frame_size {
+            Some(fs) => match fs.try_into() {
+                Ok(fs) => fs,
+                Err(_) => return Err(FrameCollectionError::InvalidFrameCount(self.frames.len())),
+            },
+            None => return Err(FrameCollectionError::InvalidFrameSize),
+        };
+
+        let first_frame = match self.frames[0].as_mut() {
+            Some(f) => f,
+            None => return Err(FrameCollectionError::InvalidFrameCount(self.frames.len())),
+        };
+
+        first_frame.ftype = FrameType::First((frame_count, frame_size));
+
+        Ok(())
     }
 
     pub fn is_complete(&self) -> bool {
@@ -215,16 +232,18 @@ impl FrameCollection {
                 FrameType::Following => FOLLOWING_FRAME_HEADER_SIZE,
             };
 
-            // NOTE: To be sure that the entire encoded frame will frame_size bytes long,
+            // NOTE: To be sure that the entire encoded frame will be no more than frame_size bytes long,
             // we need to subtract the header size beforehand.
-            let size = min(self.frame_size.unwrap() - header_size, bytes.len() - start);
-
-            // TODO: Error handling
+            let target_size = match self.frame_size {
+                Some(fs) => fs - header_size,
+                None => return Err(FrameCollectionError::InvalidFrameSize),
+            };
+            let size = min(target_size, bytes.len() - start);
             let frame = Frame::new(ftype, index, magic, Vec::from(&bytes[start..start + size]));
-            self.add_frame(frame).unwrap();
+            self.add_frame(frame)?;
 
             if start + size > bytes.len() {
-                self.write_first_frame_info();
+                self.write_first_frame_info()?;
             }
 
             start += size;

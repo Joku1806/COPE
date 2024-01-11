@@ -25,11 +25,11 @@ use crate::esp_channel::EspChannel;
 
 fn main() -> anyhow::Result<()> {
     esp_idf_svc::sys::link_patches();
-    SimpleLogger::new().init().unwrap();
+    SimpleLogger::new().init()?;
 
-    let peripherals = Peripherals::take().unwrap();
-    let mut esp_channel = EspChannel::new(peripherals.modem);
-    esp_channel.initialize();
+    let peripherals = Peripherals::take()?;
+    let mut esp_channel = EspChannel::new(peripherals.modem)?;
+    esp_channel.initialize()?;
 
     let watchdog_config = TWDTConfig {
         duration: Duration::from_secs(2),
