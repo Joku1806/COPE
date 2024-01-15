@@ -16,10 +16,6 @@ use crate::traffic_generator::random_strategy::RandomStrategy;
 use crate::traffic_generator::{TGStrategy, TrafficGenerator};
 use crate::{channel::Channel, packet::CodingInfo};
 
-use crate::log;
-use chrono::prelude::{DateTime, Local};
-use colored::Colorize;
-
 const MAX_PACKET_POOL_SIZE: usize = 8;
 
 pub struct Node {
@@ -90,7 +86,7 @@ impl Node {
     fn tick_relay(&mut self) {
         // receive
         if let Some(packet) = self.channel.receive() {
-            log!("[Relay {}]: Recieved {:?}", self.id, packet.coding_header());
+            log::info!("[Relay {}]: Recieved {:?}", self.id, packet.coding_header());
             // TODO: extract acks ment for retransmission event
             // TODO: extract reception reports
             let coding_info = packet.coding_header().first().unwrap();
@@ -98,7 +94,7 @@ impl Node {
             self.kbase.insert(packet.sender(), coding_info.clone());
             // add to packet pool
             self.packet_pool.push_packet(packet);
-            log!(
+            log::info!(
                 "[Relay {}]: Has stored {} packages and knows about {}",
                 self.id,
                 self.packet_pool.size(),
@@ -112,16 +108,16 @@ impl Node {
             return;
         }
         self.last_fifo_flush = std::time::Instant::now();
-        log!("[Relay {}]: Attepts to forward packets.", self.id);
+        log::info!("[Relay {}]: Attepts to forward packets.", self.id);
 
         // deque head of output queue
         if let Some(packet) = self.packet_pool.pop_front() {
-            log!(
+            log::info!(
                 "[Relay {}]: Starts forwarding packet {:?}",
                 self.id,
                 packet.0
             );
-            log!("[Relay {}]: Looking for Coding Opportunities", self.id);
+            log::info!("[Relay {}]: Looking for Coding Opportunities", self.id);
 
             let mut packets: Vec<(CodingInfo, PacketData)> = vec![packet];
             for &nexthop in &self.tx_whitelist {
@@ -134,7 +130,7 @@ impl Node {
                     packets.push(p);
                 }
             }
-            log!(
+            log::info!(
                 "[Relay {}]: Found {} packets to code",
                 self.id,
                 packets.len()
@@ -142,7 +138,7 @@ impl Node {
             // Remove packets from packet_pool
             // Encode if possible
             let (header, data) = self.encode(&packets);
-            log!("[Relay {}]: Encoded to {:?}, {:?}", self.id, &header, &data);
+            log::info!("[Relay {}]: Encoded to {:?}, {:?}", self.id, &header, &data);
             // TODO: add acks to header
             let pack = PacketBuilder::new()
                 .sender(self.id)
@@ -152,14 +148,13 @@ impl Node {
                 .unwrap();
             // If encoded schedule retransmission
             // send
-            if let Err(_e) = self.channel.transmit(&pack) {
-                // TODO: Log error, once we use a real logging library
-                // log::warn!("Got error transmitting {}: {}", pack, e);
+            if let Err(e) = self.channel.transmit(&pack) {
+                log::warn!("Got error transmitting {:?}: {}", pack, e);
             } else {
-                log!("[Relay {}]: Forwarded package ", self.id);
+                log::info!("[Relay {}]: Forwarded package ", self.id);
             }
         } else {
-            log!("[Relay {}]: No Packets to forward", self.id);
+            log::info!("[Relay {}]: No Packets to forward", self.id);
         }
     }
 
@@ -199,14 +194,13 @@ impl Node {
         if let Some(builder) = self.generator.generate() {
             // FIXME: handle this error
             let packet = builder.build().unwrap();
-            log!("[Node {}]: Send {:?}", self.id, &packet.coding_header());
+            log::info!("[Node {}]: Send {:?}", self.id, &packet.coding_header());
             // TODO: add reception report
-            if let Err(_e) = self.channel.transmit(&packet) {
-                // TODO: Log error, once we use a real logging library
-                // log::warn!("Got error transmitting {}: {}", pack, e);
+            if let Err(e) = self.channel.transmit(&packet) {
+                log::warn!("Got error transmitting {:?}: {}", packet, e);
             }
             self.packet_pool.push_packet(packet);
-            log!(
+            log::info!(
                 "[Node {}]: Has stored {} packages.",
                 self.id,
                 self.packet_pool.size()
@@ -216,17 +210,17 @@ impl Node {
         // receive
         if let Some(packet) = self.channel.receive() {
             if self.topology.can_receive_from(packet.sender()) {
-                log!("[Node {}]: Received {:?}", self.id, packet.coding_header());
+                log::info!("[Node {}]: Received {:?}", self.id, packet.coding_header());
                 if packet.sender() == CONFIG.relay {
                     // decode
                     if !self.is_next_hop(&packet) {
-                        log!("[Node {}]: Not a next hop of Packet.", self.id);
+                        log::info!("[Node {}]: Not a next hop of Packet.", self.id);
                     } else if let Some(data) = self.decode(&packet) {
-                        log!("[Node {}]: Decoded Packet to {:?}.", self.id, data);
+                        log::info!("[Node {}]: Decoded Packet to {:?}.", self.id, data);
                     } else {
-                        log!("[Node {}]: Could not decode Packet.", self.id);
+                        log::warn!("[Node {}]: Could not decode Packet.", self.id);
                     }
-                    log!(
+                    log::info!(
                         "[Node {}]: Has stored {} packages.",
                         self.id,
                         self.packet_pool.size()
