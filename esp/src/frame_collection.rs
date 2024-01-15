@@ -302,3 +302,301 @@ impl Deref for FrameCollection {
         &self.frames
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        Frame, FrameCollection, FrameCollectionError, FrameType, FOLLOWING_FRAME_HEADER_SIZE,
+    };
+    use anyhow::Error;
+
+    #[test_case]
+    fn frame_size_smaller_than_header_should_fail() -> Result<(), Error> {
+        anyhow::ensure!(
+            matches!(FrameCollection::new().with_frame_size(FOLLOWING_FRAME_HEADER_SIZE - 1), Err(FrameCollectionError::InvalidFrameSize)),
+            "Should not be able to create a FrameCollection with a total size smaller than the smallest header"
+        );
+
+        Ok(())
+    }
+
+    #[test_case]
+    fn mismatched_magic_should_fail() -> Result<(), Error> {
+        let mut collection = FrameCollection::new();
+
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::First((2, 6)),
+                    0,
+                    0x1f1f1f1f,
+                    Vec::from([0x01, 0x23, 0x45]),
+                ))
+                .is_ok(),
+            "mismatched_magic_should_fail: Could not add frame"
+        );
+
+        anyhow::ensure!(
+            matches!(
+                collection.add_frame(Frame::new(
+                    FrameType::Following,
+                    1,
+                    0x23232323,
+                    Vec::from([0x45, 0x67, 0x89]),
+                )),
+                Err(FrameCollectionError::MismatchedMagic(0x23232323))
+            ),
+            "mismatched_magic_should_fail: Did not return MismatchedMagic Error"
+        );
+
+        Ok(())
+    }
+
+    #[test_case]
+    fn duplicate_index_should_fail() -> Result<(), Error> {
+        let mut collection = FrameCollection::new();
+
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::First((2, 6)),
+                    0,
+                    0x1f1f1f1f,
+                    Vec::from([0x01, 0x23, 0x45]),
+                ))
+                .is_ok(),
+            "duplicate_index_should_fail: Could not add frame"
+        );
+
+        anyhow::ensure!(
+            matches!(collection
+                .add_frame(Frame::new(
+                    FrameType::First((2, 6)),
+                    0,
+                    0x1f1f1f1f,
+                    Vec::from([0x01, 0x23, 0x45]),
+                )),
+                Err(FrameCollectionError::FrameAlreadyAdded)),
+            "duplicate_index_should_fail: Could add duplicate frame, even though it is already present in the collection"
+        );
+
+        Ok(())
+    }
+
+    #[test_case]
+    fn out_of_range_index_should_fail() -> Result<(), Error> {
+        let mut collection = FrameCollection::new();
+
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::First((2, 6)),
+                    0,
+                    0x1f1f1f1f,
+                    Vec::from([0x01, 0x23, 0x45]),
+                ))
+                .is_ok(),
+            "out_of_range_index_should_fail: Could not add frame"
+        );
+
+        anyhow::ensure!(
+            matches!(collection
+                .add_frame(Frame::new(
+                    FrameType::Following,
+                    2,
+                    0x1f1f1f1f,
+                    Vec::from([0x01, 0x23, 0x45]),
+                )), Err(FrameCollectionError::InvalidFrameCount(3))),
+            "out_of_range_index_should_fail: Could add frame with index 2, even though the collection size is set to 2"
+        );
+
+        Ok(())
+    }
+
+    #[test_case]
+    fn decode_with_missing_index_should_fail() -> Result<(), Error> {
+        let mut collection = FrameCollection::new();
+
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::First((2, 6)),
+                    0,
+                    0x13371337,
+                    Vec::from([0x01, 0x23, 0x45]),
+                ))
+                .is_ok(),
+            "decode_with_missing_index_should_fail: Could not add frame"
+        );
+
+        anyhow::ensure!(
+            matches!(collection.decode(), Err(FrameCollectionError::FrameMissing)),
+            "decode_with_missing_index_should_fail: Decoding succeded, even though the final frame is missing"
+        );
+
+        Ok(())
+    }
+
+    #[test_case]
+    fn valid_encode_should_succeed() -> Result<(), Error> {
+        let data = Vec::from([
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff,
+        ]);
+        let mut collection = match FrameCollection::new()
+            .with_magic(0xfeedbeef)
+            .with_frame_size(10)
+        {
+            Ok(fc) => fc,
+            Err(_) => {
+                anyhow::bail!("valid_encode_should_succeed: Could not construct FrameCollection")
+            }
+        };
+
+        let expected = Vec::from([
+            Frame::new(
+                FrameType::First((5, 10)),
+                0,
+                0xfeedbeef,
+                Vec::from([0x00, 0x11, 0x22]),
+            ),
+            Frame::new(
+                FrameType::Following,
+                1,
+                0xfeedbeef,
+                Vec::from([0x33, 0x44, 0x55, 0x66]),
+            ),
+            Frame::new(
+                FrameType::Following,
+                2,
+                0xfeedbeef,
+                Vec::from([0x77, 0x88, 0x99, 0xaa]),
+            ),
+            Frame::new(
+                FrameType::Following,
+                3,
+                0xfeedbeef,
+                Vec::from([0xbb, 0xcc, 0xdd, 0xee]),
+            ),
+            Frame::new(FrameType::Following, 4, 0xfeedbeef, Vec::from([0xff])),
+        ]);
+
+        let enc_result = collection.encode(data.as_slice());
+        anyhow::ensure!(
+            enc_result.is_ok(),
+            "valid_encode_should_succeed: Could not encode data, {:?}",
+            enc_result
+        );
+
+        let comparable = match collection
+            .frames
+            .into_iter()
+            .collect::<Option<Vec<Frame>>>()
+        {
+            Some(c) => c,
+            None => anyhow::bail!("valid_encode_should_succeed: Could not collect frames"),
+        };
+        anyhow::ensure!(
+            comparable == expected,
+            "valid_encode_should_succeed: Bytes are not encoded to expected frame collection"
+        );
+
+        Ok(())
+    }
+
+    #[test_case]
+    fn valid_decode_should_succeed() -> Result<(), Error> {
+        let mut collection = FrameCollection::new();
+
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::First((2, 6)),
+                    0,
+                    0x13371337,
+                    Vec::from([0x01, 0x23, 0x45]),
+                ))
+                .is_ok(),
+            "valid_decode_should_succeed: Could not add frame"
+        );
+
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::Following,
+                    1,
+                    0x13371337,
+                    Vec::from([0x45, 0x67, 0x89]),
+                ))
+                .is_ok(),
+            "valid_decode_should_succeed: Could not add frame"
+        );
+
+        let expected = Vec::from([0x01, 0x23, 0x45, 0x45, 0x67, 0x89]);
+        let decoded = match collection.decode() {
+            Ok(d) => d,
+            Err(_) => {
+                anyhow::bail!("valid_decode_should_succeed: Could not decode FrameCollection")
+            }
+        };
+
+        anyhow::ensure!(
+            decoded == expected,
+            "valid_decode_should_succeed: Mismatch when decoding frames"
+        );
+
+        Ok(())
+    }
+
+    #[test_case]
+    fn valid_decode_with_out_of_order_insertion_should_succeed() -> Result<(), Error> {
+        let mut collection = FrameCollection::new();
+
+        // TODO: Test for: When following frame is added first, so the frame count is not known yet.
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::First((3, 9)),
+                    0,
+                    0x13371337,
+                    Vec::from([0x01, 0x23, 0x45]),
+                ))
+                .is_ok(),
+            "valid_decode_with_out_of_order_insertion_should_succeed: Could not add frame"
+        );
+
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::Following,
+                    2,
+                    0x13371337,
+                    Vec::from([0xab, 0xcd, 0xef]),
+                ))
+                .is_ok(),
+            "valid_decode_with_out_of_order_insertion_should_succeed: Could not add frame"
+        );
+
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::Following,
+                    1,
+                    0x13371337,
+                    Vec::from([0x45, 0x67, 0x89]),
+                ))
+                .is_ok(),
+            "valid_decode_with_out_of_order_insertion_should_succeed: Could not add frame"
+        );
+
+        let expected = Vec::from([0x01, 0x23, 0x45, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef]);
+        let decoded = match collection.decode() {
+            Ok(d) => d,
+            Err(_) => anyhow::bail!("valid_decode_with_out_of_order_insertion_should_succeed: Could not decode FrameCollection"),
+        };
+
+        anyhow::ensure!(decoded == expected, "valid_decode_with_out_of_order_insertion_should_succeed: Mismatch when decoding frames");
+
+        Ok(())
+    }
+}
