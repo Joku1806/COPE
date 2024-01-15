@@ -34,8 +34,8 @@ fn main() -> anyhow::Result<()> {
     let watchdog_config = TWDTConfig {
         duration: Duration::from_secs(2),
         panic_on_trigger: true,
-        // NOTE: Make sure that the IDLE task always runs on this core!
-        // The watchdog example uses Core::Core0 instead.
+        // NOTE: Make sure that the IDLE task always runs on this core! The watchdog example uses
+        // Core::Core0 instead.
         subscribed_idle_tasks: enum_set!(Core::Core1),
     };
     let mut driver = TWDTDriver::new(peripherals.twdt, &watchdog_config)?;

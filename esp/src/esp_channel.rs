@@ -27,8 +27,8 @@ const RX_DRAIN_TIME: Duration = Duration::from_millis(500);
 const ESPNOW_FRAME_SIZE: u8 = 250;
 
 pub struct EspChannel {
-    // NOTE: We do not access the WiFi Driver after initialize(),
-    // but we need to keep it around so it doesn't deinit when dropped.
+    // NOTE: We do not access the WiFi Driver after initialize(), but we need to keep it around so
+    // it doesn't deinit when dropped.
     wifi_driver: EspWifi<'static>,
     espnow_driver: EspNow<'static>,
     own_mac: MacAddress,
@@ -62,9 +62,9 @@ impl EspChannel {
         // Do we call all of these at some point?
         // esp_wifi_init(&cfg) - yes, in EspWifi::new
         // esp_wifi_set_mode(WIFI_MODE_STA) - yes, in wifi_driver.set_configuration
-        // esp_wifi_set_storage(WIFI_STORAGE_RAM) - no, but NVS Flash is used as storage in EspDefaultNvsPartition::take
-        // esp_wifi_set_ps(WIFI_PS_NONE) - yes, in EspNow::take
-        // esp_wifi_start() - yes, in wifi_driver.start
+        // esp_wifi_set_storage(WIFI_STORAGE_RAM) - no, but NVS Flash is used as storage
+        // in EspDefaultNvsPartition::take esp_wifi_set_ps(WIFI_PS_NONE) - yes,
+        // in EspNow::take esp_wifi_start() - yes, in wifi_driver.start
         // espnow_init(&espnow_config); - yes, in EspNow::take
         unsafe {
             esp!(esp_idf_svc::sys::esp_wifi_set_mode(
@@ -73,8 +73,9 @@ impl EspChannel {
             // NOTE: We need to be in promiscuous mode to overhear unicast packets
             // not addressed to us.
             esp!(esp_idf_svc::sys::esp_wifi_set_promiscuous(true))?;
-            // FIXME: Find out if EspNow frames are always received as a specific PromiscuousPktType in promiscuous mode.
-            // This would allow us to throw away all other frames more quickly.
+            // FIXME: Find out if EspNow frames are always received as a specific
+            // PromiscuousPktType in promiscuous mode. This would allow us to
+            // throw away all other frames more quickly.
             let filter = wifi_promiscuous_filter_t {
                 filter_mask: WIFI_PROMIS_FILTER_MASK_ALL,
             };
@@ -110,9 +111,6 @@ impl EspChannel {
                 let mut buffer = rx_buffer_clone.lock().unwrap();
 
                 if !buffer.contains_key(&partial_frame.get_magic()) {
-                    // FIXME: Find a way to drop stale entries,
-                    // if a frame of a packet could not be received and was not re-sent.
-                    // Maybe store a creation timestamp and clean the list every 500ms?
                     buffer.insert(
                         partial_frame.get_magic(),
                         (SystemTime::now(), FrameCollection::new()),
@@ -156,12 +154,13 @@ impl EspChannel {
         self.register_callbacks()?;
         self.set_wifi_config_and_start()?;
 
-        // NOTE: In unicast mode, the sender has to be paired with the receiver and vice versa.
-        // To make sure this is guaranteed from the start, we add all unicast peers upfront.
-        // FIXME: There is a hard limit of 20 concurrent Unicast peers.
-        // If we need more than that in the future, we need to add and remove them dynamically somehow.
-        // This will be complicated, since messages can only be received correctly,
-        // if both sender and receiver have each other added as peers.
+        // NOTE: In unicast mode, the sender has to be paired with the receiver and vice
+        // versa. To make sure this is guaranteed from the start, we add all unicast
+        // peers upfront. FIXME: There is a hard limit of 20 concurrent Unicast peers.
+        // If we need more than that in the future, we need to add and remove them
+        // dynamically somehow. This will be complicated, since messages can only be
+        // received correctly, if both sender and receiver have each other added as
+        // peers.
         for (_, mac) in self.mac_map.iter() {
             if *mac != self.own_mac {
                 self.add_unicast_peer(mac)?;
@@ -272,15 +271,14 @@ impl Channel for EspChannel {
                     .espnow_driver
                     .send(mac.into_array(), serialized.as_slice());
 
-                // NOTE: We wait here until the TX callback ran and reset this flag.
-                // This is recommended practice in the esp-idf espnow guide.
-                // Apparently transmissions can fail if you send too quickly.
+                // NOTE: We wait here until the TX callback ran and reset this flag. This is
+                // recommended practice in the esp-idf espnow guide. Apparently transmissions
+                // can fail if you send too quickly.
                 while !*self.tx_callback_done.lock().unwrap() {}
 
                 if result.is_err() {
-                    // TODO: Real error handling.
-                    // Specifically here, do we return an error?
-                    // We have not sent the other frames yet.
+                    // TODO: Real error handling. Specifically here, do we return an error? We have
+                    // not sent the other frames yet.
                     return Err(ChannelError::NoACK);
                 }
             }

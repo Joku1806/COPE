@@ -170,8 +170,9 @@ struct RadioMetadataHeader {
     rx_state: u32,
 }
 
-// FIXME: This is the common header at the beginning of all promiscuous mode RX callback buffers, which is only specific to Espressif.
-// It is not part of an IEEE 802.11 Frame, this struct/file should be renamed to something else!
+// FIXME: This is the common header at the beginning of all promiscuous mode RX
+// callback buffers, which is only specific to Espressif. It is not part of an
+// IEEE 802.11 Frame, this struct/file should be renamed to something else!
 #[derive(Default, Debug)]
 pub struct WifiFrame {
     header: RadioMetadataHeader,
@@ -187,7 +188,8 @@ impl TryFrom<&[u8]> for WifiFrame {
         let header = &bytes[..HEADER_SIZE];
         let bits = header.view_bits::<bv::Lsb0>();
 
-        // TODO: Return all errors by coercing to a common error type somehow, instead of panicking
+        // TODO: Return all errors by coercing to a common error type somehow, instead
+        // of panicking
         frame.header.rssi = bits[0..8].load::<i32>();
         frame.header.rate = bits[8..13].load::<u32>();
         frame.header.sig_mode = bits[14..16].load::<u32>().try_into()?;

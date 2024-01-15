@@ -52,14 +52,12 @@ unsafe extern "C" fn handle_promiscuous_rx(
     buf: *mut ffi::c_void,
     pkt_type: wifi_promiscuous_pkt_type_t,
 ) {
-    // NOTE: There has to be a better way to do this.
-    // It would be nice to just be able to transmute
-    // from buf to a wifi_promiscuous_pkt_t, but that
-    // is not possible because buf is not sized. The
-    // internal representation in memory is probably
-    // different as well.
-    // NOTE: When upstreaming, we should not use the bitvec crate to do this.
-    // Just do some bitshifting magic.
+    // NOTE: There has to be a better way to do this. It would be nice to just be
+    // able to transmute from buf to a wifi_promiscuous_pkt_t, but that is not
+    // possible because buf is not sized. The internal representation in memory is
+    // probably different as well.
+    // FIXME: When upstreaming, we should not use the bitvec crate to do this. Just
+    // do some bitshifting magic.
     const HEADER_SIZE: usize = 48;
     let header = core::slice::from_raw_parts(buf as *mut u8, HEADER_SIZE);
     let bits = header.view_bits::<bv::Lsb0>();

@@ -1,9 +1,8 @@
 #[cfg(test)]
 use anyhow::Error;
 
-// TODO: Look into replacing this with defmt-test.
-// I already tried once, but couldn't get it to run
-// unit tests.
+// TODO: Look into replacing this with defmt-test. I already tried once, but
+// couldn't get it to run unit tests.
 #[cfg(test)]
 pub fn run(tests: &[&(dyn Fn() -> Result<(), Error>)]) {
     esp_idf_svc::sys::link_patches(); //Needed for esp32-rs

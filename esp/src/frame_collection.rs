@@ -14,8 +14,8 @@ pub enum FrameCollectionError {
     MismatchedMagic(u32),
 }
 
-// NOTE: Maybe it would be better if each frame contained
-// the index and length, not just the first frame.
+// NOTE: Maybe it would be better if each frame contained the index and length,
+// not just the first frame.
 #[derive(PartialEq, Clone, Debug)]
 pub enum FrameType {
     First((u8, u8)),
@@ -54,7 +54,6 @@ impl TryFrom<&[u8]> for Frame {
     type Error = FrameError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        // FIXME: This check does not work anymore, now that there are two different header sizes. We first need to determine
         if bytes.len() < FOLLOWING_FRAME_HEADER_SIZE.into() {
             return Err(FrameError::InvalidHeader);
         }
@@ -122,8 +121,8 @@ impl Into<Vec<u8>> for Frame {
 
 #[derive(Clone)]
 pub struct FrameCollection {
-    // NOTE: Check if we can just store Vec<Frame>.
-    // We would need to check insertion behaviour for that.
+    // NOTE: Check if we can just store Vec<Frame>. We would need to check insertion behaviour for
+    // that.
     frames: Vec<Option<Frame>>,
     frame_size: Option<u8>,
     magic: Option<u32>,
@@ -173,7 +172,8 @@ impl FrameCollection {
             }
         }
 
-        // FIXME: Do this without unwrap. In general, the many Optional<> fields in this struct are awkward to work with
+        // FIXME: Do this without unwrap. In general, the many Optional<> fields in this
+        // struct are awkward to work with.
         if index < self.frames.len() && self.frames.get(index).unwrap().is_some() {
             return Err(FrameCollectionError::FrameAlreadyAdded);
         }
@@ -214,8 +214,8 @@ impl FrameCollection {
                 FrameType::Following => FOLLOWING_FRAME_HEADER_SIZE.into(),
             };
 
-            // NOTE: To be sure that the entire encoded frame will be no more than frame_size bytes long,
-            // we need to subtract the header size beforehand.
+            // NOTE: To be sure that the entire encoded frame will be no more than
+            // frame_size bytes long, we need to subtract the header size beforehand.
             let target_size = frame_size - header_size;
             let size = min(target_size, data_len - start);
             start += size;
@@ -253,9 +253,6 @@ impl FrameCollection {
 
         while start < bytes.len() {
             let ftype = match index {
-                // NOTE: While creating the FrameCollection, we don't exactly know
-                // how many frames it will contain. So 0 is just a placeholder
-                // and will be changed in write_first_frame_info().
                 0 => FrameType::First((frame_count, frame_size)),
                 _ => FrameType::Following,
             };
@@ -265,8 +262,8 @@ impl FrameCollection {
                 FrameType::Following => FOLLOWING_FRAME_HEADER_SIZE.into(),
             };
 
-            // NOTE: To be sure that the entire encoded frame will be no more than frame_size bytes long,
-            // we need to subtract the header size beforehand.
+            // NOTE: To be sure that the entire encoded frame will be no more than
+            // frame_size bytes long, we need to subtract the header size beforehand.
             let target_size = Into::<usize>::into(frame_size) - header_size;
             let size = min(target_size, bytes.len() - start);
             let frame = Frame::new(ftype, index, magic, Vec::from(&bytes[start..start + size]));
@@ -324,6 +321,8 @@ mod tests {
     fn mismatched_magic_should_fail() -> Result<(), Error> {
         let mut collection = FrameCollection::new();
 
+        // FIXME: In all tests, FrameType::First((2, 6)) is wrong, but does not affect
+        // the test outcome. Should be fixed though.
         anyhow::ensure!(
             collection
                 .add_frame(Frame::new(
@@ -552,7 +551,8 @@ mod tests {
     fn valid_decode_with_out_of_order_insertion_should_succeed() -> Result<(), Error> {
         let mut collection = FrameCollection::new();
 
-        // TODO: Test for: When following frame is added first, so the frame count is not known yet.
+        // TODO: Test for: When following frame is added first, so the frame count is
+        // not known yet.
         anyhow::ensure!(
             collection
                 .add_frame(Frame::new(
