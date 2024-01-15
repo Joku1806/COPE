@@ -24,7 +24,7 @@ use std::time::{Duration, SystemTime};
 
 // TODO: Make settable from config
 const RX_DRAIN_TIME: Duration = Duration::from_millis(500);
-const ESPNOW_FRAME_SIZE: usize = 250;
+const ESPNOW_FRAME_SIZE: u8 = 250;
 
 pub struct EspChannel {
     // NOTE: We do not access the WiFi Driver after initialize(),
