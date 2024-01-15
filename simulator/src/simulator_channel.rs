@@ -1,12 +1,16 @@
-use cope::channel::{Channel, ChannelError};
+use cope::channel::Channel;
 use cope::packet::Packet;
-use std::sync::mpsc::{Receiver, Sender};
+use std::{
+    error::Error,
+    sync::mpsc::{Receiver, Sender},
+};
 
 pub struct SimulatorChannel {
     rx: Receiver<Packet>,
     tx: Sender<Packet>,
 }
 
+// TODO: Figure out if this is needed
 unsafe impl Send for SimulatorChannel {}
 unsafe impl Sync for SimulatorChannel {}
 
@@ -17,7 +21,7 @@ impl SimulatorChannel {
 }
 
 impl Channel for SimulatorChannel {
-    fn transmit(&self, packet: &Packet) -> Result<(), ChannelError> {
+    fn transmit(&self, packet: &Packet) -> Result<(), Box<dyn Error>> {
         // FIXME: Figure out how to send without cloning
         self.tx.send(packet.clone()).unwrap();
 

@@ -1,8 +1,8 @@
-use crate::espnow_frame::EspNowFrame;
-use crate::frame_collection::{Frame, FrameCollection};
+use crate::espnow_frame::{EspNowDecodingError, EspNowFrame};
+use crate::frame_collection::{Frame, FrameCollection, FrameCollectionError, FrameError};
 use crate::promiscuous_wifi;
 use crate::wifi_frame::WifiFrame;
-use cope::channel::{Channel, ChannelError};
+use cope::channel::Channel;
 use cope::config::CONFIG;
 use cope::packet::Packet;
 use cope_config::types::{mac_address::MacAddress, node_id::NodeID};
@@ -19,12 +19,69 @@ use esp_idf_svc::{
     wifi::{EspWifi, WifiDeviceId},
 };
 use std::collections::HashMap;
+use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 // TODO: Make settable from config
 const RX_DRAIN_TIME: Duration = Duration::from_millis(500);
 const ESPNOW_FRAME_SIZE: u8 = 250;
+
+#[derive(Debug)]
+pub enum EspChannelError {
+    UnknownReceiver,
+    UnicastPeerError(MacAddress, EspError),
+    SerializationError(bincode::Error),
+    FrameEncodingError(FrameCollectionError),
+    FrameDecodingError(FrameError),
+    // FIXME: Stupid name, try to find a better one
+    PacketDecodingError(FrameCollectionError),
+    EspNowFrameDecodingError(EspNowDecodingError),
+    EspNowTransmissionError(EspError),
+}
+
+impl std::fmt::Display for EspChannelError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EspChannelError::UnknownReceiver => write!(f, "packet receiver was not set"),
+            EspChannelError::UnicastPeerError(mac, e) => {
+                write!(f, "could not add {} as peer: {}", mac, e)
+            }
+            EspChannelError::SerializationError(e) => {
+                write!(f, "could not serialize packet: {}", e)
+            }
+            EspChannelError::FrameEncodingError(e) => {
+                // FIXME: Implement Display trait for FrameCollectionError
+                write!(
+                    f,
+                    "could not encode serialized packet into partial packet frames: {:?}",
+                    e
+                )
+            }
+            EspChannelError::FrameDecodingError(e) => {
+                // FIXME: Implement Display trait for FrameError
+                write!(f, "could not decode partial packet frame: {:?}", e)
+            }
+            EspChannelError::PacketDecodingError(e) => {
+                // FIXME: Implement Display trait for FrameCollectionError
+                write!(
+                    f,
+                    "could not add partial packet frame to collection: {:?}",
+                    e
+                )
+            }
+            EspChannelError::EspNowFrameDecodingError(e) => {
+                // FIXME: Implement Display trait for EspNowDecodingError
+                write!(f, "could not decode bytes into EspNow frame: {:?}", e)
+            }
+            EspChannelError::EspNowTransmissionError(e) => {
+                write!(f, "could not transmit EspNow frame: {}", e)
+            }
+        }
+    }
+}
+
+impl Error for EspChannelError {}
 
 pub struct EspChannel {
     // NOTE: We do not access the WiFi Driver after initialize(), but we need to keep it around so
@@ -95,42 +152,44 @@ impl EspChannel {
 
     fn register_callbacks(&mut self) -> Result<(), EspError> {
         let rx_buffer_clone = self.rx_buffer.clone();
-        let rx_callback =
-            move |wifi_frame: WifiFrame, _pkt_type: promiscuous_wifi::PromiscuousPktType| {
-                // TODO: Better error handling!
-                let espnow_frame = match EspNowFrame::try_from(wifi_frame.get_data()) {
-                    Ok(f) => f,
-                    Err(_) => return Ok(()),
-                };
-
-                let partial_frame = match Frame::try_from(espnow_frame.get_body()) {
-                    Ok(f) => f,
-                    Err(_) => return Ok(()),
-                };
-
-                let mut buffer = rx_buffer_clone.lock().unwrap();
-
-                if !buffer.contains_key(&partial_frame.get_magic()) {
-                    buffer.insert(
-                        partial_frame.get_magic(),
-                        (SystemTime::now(), FrameCollection::new()),
-                    );
-                }
-
-                let frame_collection = buffer.get_mut(&partial_frame.get_magic()).unwrap();
-
-                if let Err(e) = frame_collection.1.add_frame(partial_frame) {
-                    log::warn!("Could not process received partial frame: {:?}", e);
-                }
-
-                Ok(())
+        let rx_callback = move |wifi_frame: WifiFrame,
+                                _pkt_type: promiscuous_wifi::PromiscuousPktType|
+              -> Result<(), Box<dyn Error>> {
+            let espnow_frame = match EspNowFrame::try_from(wifi_frame.get_data()) {
+                Ok(f) => f,
+                Err(e) => return Err(Box::new(EspChannelError::EspNowFrameDecodingError(e))),
             };
+
+            let partial_frame = match Frame::try_from(espnow_frame.get_body()) {
+                Ok(f) => f,
+                Err(e) => return Err(Box::new(EspChannelError::FrameDecodingError(e))),
+            };
+
+            let mut buffer = rx_buffer_clone.lock().unwrap();
+
+            if !buffer.contains_key(&partial_frame.get_magic()) {
+                buffer.insert(
+                    partial_frame.get_magic(),
+                    (SystemTime::now(), FrameCollection::new()),
+                );
+            }
+
+            let frame_collection = buffer.get_mut(&partial_frame.get_magic()).unwrap();
+
+            if let Err(e) = frame_collection.1.add_frame(partial_frame) {
+                return Err(Box::new(EspChannelError::PacketDecodingError(e)));
+            }
+
+            Ok(())
+        };
 
         promiscuous_wifi::set_promiscuous_rx_callback(&mut self.wifi_driver, rx_callback)?;
 
         let tx_callback_done_clone = self.tx_callback_done.clone();
         self.espnow_driver
             .register_send_cb(move |mac: &[u8], status: SendStatus| {
+                // NOTE: It is not possible for the send callback to return an error, so we have
+                // to log them here, which is kind of annoying.
                 if matches!(status, SendStatus::FAIL) {
                     let fmt_mac = MacAddress::new(mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
                     log::warn!("Sending packet to {} failed!", fmt_mac);
@@ -218,9 +277,9 @@ impl EspChannel {
 }
 
 impl Channel for EspChannel {
-    fn transmit(&self, packet: &Packet) -> Result<(), ChannelError> {
+    fn transmit(&self, packet: &Packet) -> Result<(), Box<dyn Error>> {
         let receiver = match packet.canonical_receiver() {
-            None => return Err(ChannelError::UnknownReceiver),
+            None => return Err(Box::new(EspChannelError::UnknownReceiver)),
             Some(r) => r,
         };
 
@@ -232,9 +291,7 @@ impl Channel for EspChannel {
                 );
 
                 if let Err(e) = self.add_unicast_peer(mac) {
-                    log::warn!("Could not add peer: {}", e);
-                    // TODO: real error handling
-                    return Err(ChannelError::NoACK);
+                    return Err(Box::new(EspChannelError::UnicastPeerError(*mac, e)));
                 }
             }
 
@@ -242,26 +299,16 @@ impl Channel for EspChannel {
 
             let serialized = match packet.serialize_into() {
                 Ok(s) => s,
-                Err(e) => {
-                    log::warn!("Could not serialize packet: {}", e);
-                    // TODO: real error handling
-                    return Err(ChannelError::NoACK);
-                }
+                Err(e) => return Err(Box::new(EspChannelError::SerializationError(e))),
             };
 
             let mut frames = match FrameCollection::new().with_frame_size(ESPNOW_FRAME_SIZE) {
                 Ok(fc) => fc,
-                Err(e) => {
-                    log::warn!("Error while creating FrameCollection: {:?}", e);
-                    // TODO: Real error handling
-                    return Err(ChannelError::NoACK);
-                }
+                Err(e) => return Err(Box::new(EspChannelError::FrameEncodingError(e))),
             };
 
             if let Err(e) = frames.encode(serialized.as_slice()) {
-                log::warn!("Error while enconding packet: {:?}", e);
-                // TODO: Real error handling
-                return Err(ChannelError::NoACK);
+                return Err(Box::new(EspChannelError::FrameEncodingError(e)));
             }
 
             for frame in frames.iter() {
@@ -277,9 +324,10 @@ impl Channel for EspChannel {
                 while !*self.tx_callback_done.lock().unwrap() {}
 
                 if result.is_err() {
-                    // TODO: Real error handling. Specifically here, do we return an error? We have
-                    // not sent the other frames yet.
-                    return Err(ChannelError::NoACK);
+                    // Should we return an error here? We have not sent the other frames yet.
+                    return Err(Box::new(EspChannelError::EspNowTransmissionError(
+                        result.err().unwrap(),
+                    )));
                 }
             }
         }

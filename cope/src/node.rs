@@ -152,9 +152,12 @@ impl Node {
                 .unwrap();
             // If encoded schedule retransmission
             // send
-            // TODO: Error handling
-            let _ = self.channel.transmit(&pack);
-            log!("[Relay {}]: Forwarded package ", self.id);
+            if let Err(_e) = self.channel.transmit(&pack) {
+                // TODO: Log error, once we use a real logging library
+                // log::warn!("Got error transmitting {}: {}", pack, e);
+            } else {
+                log!("[Relay {}]: Forwarded package ", self.id);
+            }
         } else {
             log!("[Relay {}]: No Packets to forward", self.id);
         }
@@ -198,7 +201,10 @@ impl Node {
             let packet = builder.build().unwrap();
             log!("[Node {}]: Send {:?}", self.id, &packet.coding_header());
             // TODO: add reception report
-            self.channel.transmit(&packet);
+            if let Err(_e) = self.channel.transmit(&packet) {
+                // TODO: Log error, once we use a real logging library
+                // log::warn!("Got error transmitting {}: {}", pack, e);
+            }
             self.packet_pool.push_packet(packet);
             log!(
                 "[Node {}]: Has stored {} packages.",

@@ -180,7 +180,7 @@ impl PacketBuilder {
     }
 
     pub fn build(self) -> Result<Packet, Error> {
-        // check if everything is set
+        // TODO: check if everything is set
         // build
         Ok(Packet {
             id: self.id,

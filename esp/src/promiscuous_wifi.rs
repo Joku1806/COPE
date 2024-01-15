@@ -10,6 +10,7 @@ use esp_idf_svc::sys::{
     wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT, wifi_promiscuous_pkt_type_t_WIFI_PKT_MISC, EspError,
 };
 use esp_idf_svc::{sys::esp, wifi::EspWifi};
+use std::error::Error;
 
 #[derive(Debug)]
 pub enum PromiscuousPktType {
@@ -45,7 +46,7 @@ impl From<wifi_promiscuous_pkt_type_t> for PromiscuousPktType {
 
 #[allow(clippy::type_complexity)]
 static mut PROMISCUOUS_RX_CALLBACK: Option<
-    Box<dyn FnMut(WifiFrame, PromiscuousPktType) -> Result<(), EspError> + 'static>,
+    Box<dyn FnMut(WifiFrame, PromiscuousPktType) -> Result<(), Box<dyn Error>> + 'static>,
 > = None;
 
 unsafe extern "C" fn handle_promiscuous_rx(
@@ -88,8 +89,9 @@ unsafe extern "C" fn handle_promiscuous_rx(
         }
     };
 
-    // TODO: Be able to return error here instead of quietly failing
-    let _ = rs_cb(rs_frame, rs_pkt_type);
+    if let Err(e) = rs_cb(rs_frame, rs_pkt_type) {
+        log::warn!("Reception error: {}", e);
+    }
 }
 
 pub fn set_promiscuous_rx_callback<'a, R>(
@@ -97,21 +99,23 @@ pub fn set_promiscuous_rx_callback<'a, R>(
     mut rx_callback: R,
 ) -> Result<(), EspError>
 where
-    R: FnMut(WifiFrame, PromiscuousPktType) -> Result<(), EspError> + Send + 'static,
+    R: FnMut(WifiFrame, PromiscuousPktType) -> Result<(), Box<dyn Error>> + Send + 'static,
 {
     let _ = wifi_driver.disconnect();
     let _ = wifi_driver.stop();
 
     #[allow(clippy::type_complexity)]
     let rx_callback: Box<
-        Box<dyn FnMut(WifiFrame, PromiscuousPktType) -> Result<(), EspError> + Send + 'a>,
+        Box<dyn FnMut(WifiFrame, PromiscuousPktType) -> Result<(), Box<dyn Error>> + Send + 'a>,
     > = Box::new(Box::new(move |frame, pkt_type| {
         rx_callback(frame, pkt_type)
     }));
 
     #[allow(clippy::type_complexity)]
     let rx_callback: Box<
-        Box<dyn FnMut(WifiFrame, PromiscuousPktType) -> Result<(), EspError> + Send + 'static>,
+        Box<
+            dyn FnMut(WifiFrame, PromiscuousPktType) -> Result<(), Box<dyn Error>> + Send + 'static,
+        >,
     > = unsafe { core::mem::transmute(rx_callback) };
 
     unsafe {
