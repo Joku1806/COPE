@@ -38,6 +38,7 @@ pub enum EspChannelError {
     PacketDecodingError(FrameCollectionError),
     EspNowFrameDecodingError(EspNowDecodingError),
     EspNowTransmissionError(EspError),
+    EspNowTransmissionCallbackError(MacAddress),
 }
 
 impl std::fmt::Display for EspChannelError {
@@ -77,6 +78,9 @@ impl std::fmt::Display for EspChannelError {
             EspChannelError::EspNowTransmissionError(e) => {
                 write!(f, "could not transmit EspNow frame: {}", e)
             }
+            EspChannelError::EspNowTransmissionCallbackError(mac) => {
+                write!(f, "could not transmit EspNow frame to {}", mac)
+            }
         }
     }
 }
@@ -92,6 +96,7 @@ pub struct EspChannel {
     mac_map: HashMap<NodeID, MacAddress>,
     rx_buffer: Arc<Mutex<HashMap<u32, (SystemTime, FrameCollection)>>>,
     tx_callback_done: Arc<Mutex<bool>>,
+    tx_callback_result: Arc<Mutex<Result<(), EspChannelError>>>,
 }
 
 impl EspChannel {
@@ -110,6 +115,7 @@ impl EspChannel {
             mac_map: HashMap::from(CONFIG.nodes),
             rx_buffer: Arc::new(Mutex::new(HashMap::new())),
             tx_callback_done: Arc::new(Mutex::new(false)),
+            tx_callback_result: Arc::new(Mutex::new(Ok(()))),
         })
     }
 
@@ -186,24 +192,19 @@ impl EspChannel {
         promiscuous_wifi::set_promiscuous_rx_callback(&mut self.wifi_driver, rx_callback)?;
 
         let tx_callback_done_clone = self.tx_callback_done.clone();
+        let tx_result_clone = self.tx_callback_result.clone();
         self.espnow_driver
             .register_send_cb(move |mac: &[u8], status: SendStatus| {
                 // NOTE: It is not possible for the send callback to return an error, so we have
                 // to log them here, which is kind of annoying.
                 if matches!(status, SendStatus::FAIL) {
-                    let fmt_mac = MacAddress::new(mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-                    log::warn!("Sending packet to {} failed!", fmt_mac);
+                    *tx_result_clone.lock().unwrap() =
+                        Err(EspChannelError::EspNowTransmissionCallbackError(
+                            MacAddress::new(mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]),
+                        ));
                 }
 
-                let mut done = tx_callback_done_clone.lock().unwrap();
-
-                if *done {
-                    log::warn!(
-                        "TX Callback status flag was not reset after previous transmission!"
-                    );
-                }
-
-                *done = true;
+                *tx_callback_done_clone.lock().unwrap() = true;
             })?;
 
         Ok(())
@@ -321,6 +322,7 @@ impl Channel for EspChannel {
                 // NOTE: We wait here until the TX callback ran and reset this flag. This is
                 // recommended practice in the esp-idf espnow guide. Apparently transmissions
                 // can fail if you send too quickly.
+                // TODO: Can we deadlock here?
                 while !*self.tx_callback_done.lock().unwrap() {}
 
                 if result.is_err() {
@@ -328,6 +330,24 @@ impl Channel for EspChannel {
                     return Err(Box::new(EspChannelError::EspNowTransmissionError(
                         result.err().unwrap(),
                     )));
+                }
+
+                let mut tx_callback_result = self.tx_callback_result.lock().unwrap();
+                if tx_callback_result.is_err() {
+                    // TODO: There has to be a better way to do this in Rust.
+                    // This is the ugliest code I have ever written.
+                    let mac = match tx_callback_result.as_ref().unwrap_err() {
+                        EspChannelError::EspNowTransmissionCallbackError(mac) => *mac,
+                        _ => MacAddress::new(0, 0, 0, 0, 0, 0),
+                    };
+
+                    let copy: Result<(), Box<dyn std::error::Error>> = Err(Box::new(
+                        EspChannelError::EspNowTransmissionCallbackError(mac),
+                    ));
+
+                    *tx_callback_result = Ok(());
+
+                    return copy;
                 }
             }
         }
