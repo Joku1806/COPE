@@ -308,6 +308,93 @@ mod tests {
     use anyhow::Error;
 
     #[test_case]
+    fn first_frame_encode_should_succeed() -> Result<(), Error> {
+        let first_frame = Frame::new(
+            FrameType::First((1, 4)),
+            0,
+            0x1f1f1f1f,
+            Vec::from([0xfe, 0xed, 0xbe, 0xef]),
+        );
+
+        let expected = Vec::from([0x1f, 0x1f, 0x1f, 0x1f, 0, 1, 4, 0xfe, 0xed, 0xbe, 0xef]);
+        let actual: Vec<u8> = first_frame.into();
+
+        anyhow::ensure!(
+            actual == expected,
+            "First frame encoding does not match expected value"
+        );
+
+        Ok(())
+    }
+
+    #[test_case]
+    fn following_frame_encode_should_succeed() -> Result<(), Error> {
+        let first_frame = Frame::new(
+            FrameType::Following,
+            1,
+            0xabababab,
+            Vec::from([0xde, 0xad, 0xc0, 0xde]),
+        );
+
+        let expected = Vec::from([0xab, 0xab, 0xab, 0xab, 1, 1, 0xde, 0xad, 0xc0, 0xde]);
+        let actual: Vec<u8> = first_frame.into();
+
+        anyhow::ensure!(
+            actual == expected,
+            "First frame encoding does not match expected value"
+        );
+
+        Ok(())
+    }
+
+    #[test_case]
+    fn first_frame_decode_should_succeed() -> Result<(), Error> {
+        let encoded: [u8; 11] = [0x1f, 0x1f, 0x1f, 0x1f, 0, 1, 4, 0xfe, 0xed, 0xbe, 0xef];
+
+        let expected = Frame::new(
+            FrameType::First((1, 4)),
+            0,
+            0x1f1f1f1f,
+            Vec::from([0xfe, 0xed, 0xbe, 0xef]),
+        );
+        let actual = match Frame::try_from(encoded.as_slice()) {
+            Ok(f) => f,
+            Err(_) => anyhow::bail!("Could not decode frame"),
+        };
+
+        anyhow::ensure!(
+            actual == expected,
+            "Decoded first frame does not match expected value"
+        );
+
+        Ok(())
+    }
+
+    #[test_case]
+    fn following_frame_decode_should_succeed() -> Result<(), Error> {
+        let encoded: [u8; 10] = [0xab, 0xab, 0xab, 0xab, 1, 1, 0xde, 0xad, 0xc0, 0xde];
+
+        let expected = Frame::new(
+            FrameType::Following,
+            1,
+            0xabababab,
+            Vec::from([0xde, 0xad, 0xc0, 0xde]),
+        );
+
+        let actual = match Frame::try_from(encoded.as_slice()) {
+            Ok(f) => f,
+            Err(_) => anyhow::bail!("Could not decode frame"),
+        };
+
+        anyhow::ensure!(
+            actual == expected,
+            "Decoded following frame does not match expected value"
+        );
+
+        Ok(())
+    }
+
+    #[test_case]
     fn frame_size_smaller_than_header_should_fail() -> Result<(), Error> {
         anyhow::ensure!(
             matches!(FrameCollection::new().with_frame_size(FOLLOWING_FRAME_HEADER_SIZE - 1), Err(FrameCollectionError::InvalidFrameSize)),
