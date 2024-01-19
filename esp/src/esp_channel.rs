@@ -160,12 +160,11 @@ impl EspChannel {
         let rx_callback = move |wifi_frame: WifiFrame,
                                 pkt_type: promiscuous_wifi::PromiscuousPktType|
               -> Result<(), Box<dyn Error>> {
-            // NOTE: We should probably not return an error here, since this is a
-            // promiscuous WiFi callback and will therefore also sniff WiFi traffic that is
-            // not EspNow.
             let espnow_frame = match EspNowFrame::try_from(wifi_frame.get_data()) {
                 Ok(f) => f,
-                Err(e) => return Err(Box::new(EspChannelError::EspNowFrameDecodingError(e))),
+                // NOTE: The WiFi sniffer also receives other data that is not EspNow. To not
+                // spam the debug output, we silence this warning.
+                Err(_e) => return Ok(()),
             };
 
             log::info!(
