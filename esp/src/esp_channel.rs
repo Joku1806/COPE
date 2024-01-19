@@ -159,12 +159,21 @@ impl EspChannel {
     fn register_callbacks(&mut self) -> Result<(), EspError> {
         let rx_buffer_clone = self.rx_buffer.clone();
         let rx_callback = move |wifi_frame: WifiFrame,
-                                _pkt_type: promiscuous_wifi::PromiscuousPktType|
+                                pkt_type: promiscuous_wifi::PromiscuousPktType|
               -> Result<(), Box<dyn Error>> {
+            // NOTE: We should probably not return an error here, since this is a
+            // promiscuous WiFi callback and will therefore also sniff WiFi traffic that is
+            // not EspNow.
             let espnow_frame = match EspNowFrame::try_from(wifi_frame.get_data()) {
                 Ok(f) => f,
                 Err(e) => return Err(Box::new(EspChannelError::EspNowFrameDecodingError(e))),
             };
+
+            log::info!(
+                "Received an EspNow frame {:?} with packet type {:?}",
+                espnow_frame,
+                pkt_type
+            );
 
             let partial_frame = match Frame::try_from(espnow_frame.get_body()) {
                 Ok(f) => f,
@@ -373,8 +382,8 @@ impl Channel for EspChannel {
         self.rx_buffer
             .lock()
             .unwrap()
-            .retain(|_, (creation_time, collection)| {
-                let elapsed = match creation_time.elapsed() {
+            .retain(|_, (last_frame_rx, collection)| {
+                let elapsed = match last_frame_rx.elapsed() {
                     Ok(elapsed) => elapsed,
                     Err(_) => Duration::ZERO,
                 };

@@ -1,6 +1,6 @@
 use cope_config::types::mac_address::MacAddress;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct EspNowMacHeader {
     frame_control: u16,
     duration_or_id: u16,
@@ -10,7 +10,7 @@ struct EspNowMacHeader {
     sequence_control: u16,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct EspNowVendorContent {
     element_id: u8,
     length: u8,
@@ -20,7 +20,7 @@ struct EspNowVendorContent {
     body: Vec<u8>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct EspNowFrame {
     mac_header: EspNowMacHeader,
     category_code: u8,
