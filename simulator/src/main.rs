@@ -9,7 +9,9 @@ use simulator_channel::SimulatorChannel;
 mod simulator_channel;
 
 fn main() -> anyhow::Result<()> {
-    SimpleLogger::new().init()?;
+    SimpleLogger::new()
+        .with_level(log::LevelFilter::Warn)
+        .init()?;
 
     let (tx, rx) = channel();
     let mut node_channels = HashMap::new();

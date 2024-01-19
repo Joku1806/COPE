@@ -25,7 +25,9 @@ use crate::esp_channel::EspChannel;
 
 fn main() -> anyhow::Result<()> {
     esp_idf_svc::sys::link_patches();
-    SimpleLogger::new().init()?;
+    SimpleLogger::new()
+        .with_level(log::LevelFilter::Warn)
+        .init()?;
 
     let peripherals = Peripherals::take()?;
     let mut esp_channel = EspChannel::new(peripherals.modem)?;
