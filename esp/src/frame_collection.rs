@@ -64,15 +64,15 @@ impl TryFrom<&[u8]> for Frame {
         };
         let magic = u32::from_be_bytes(magic_bytes);
 
-        let ftype = match bytes[5] {
-            0 => FrameType::First((bytes[6], bytes[7])),
+        let ftype = match bytes[4] {
+            0 => FrameType::First((bytes[5], bytes[6])),
             1 => FrameType::Following,
             _ => return Err(FrameError::InvalidHeader),
         };
 
         let index = match ftype {
             FrameType::First(_) => 0,
-            FrameType::Following => bytes[6],
+            FrameType::Following => bytes[5],
         };
 
         let data_start: usize = match ftype {
@@ -98,12 +98,12 @@ impl Into<Vec<u8>> for Frame {
 
         v[0..4].clone_from_slice(&u32::to_be_bytes(self.magic));
 
-        v[5] = match self.ftype {
+        v[4] = match self.ftype {
             FrameType::First(_) => 0,
             FrameType::Following => 1,
         };
 
-        v[6] = match self.ftype {
+        v[5] = match self.ftype {
             FrameType::First((frame_count, _)) => frame_count,
             // NOTE: Store inside enum member, like above?
             FrameType::Following => self.index,
