@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 // TODO: Make settable from config
-const RX_DRAIN_TIME: Duration = Duration::from_millis(500);
+const RX_DRAIN_TIME: Duration = Duration::from_millis(1000);
 const ESPNOW_FRAME_SIZE: u8 = 250;
 
 #[derive(Debug)]
