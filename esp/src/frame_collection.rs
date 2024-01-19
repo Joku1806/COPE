@@ -110,7 +110,7 @@ impl Into<Vec<u8>> for Frame {
         };
 
         if let FrameType::First((_, frame_size)) = self.ftype {
-            v.push(frame_size);
+            v[6] = frame_size;
         }
 
         v.extend(self.data);
