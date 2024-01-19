@@ -34,7 +34,7 @@ fn main() -> anyhow::Result<()> {
     esp_channel.initialize()?;
 
     let watchdog_config = TWDTConfig {
-        duration: Duration::from_secs(2),
+        duration: Duration::from_secs(30),
         panic_on_trigger: true,
         // NOTE: Make sure that the IDLE task always runs on this core! The watchdog example uses
         // Core::Core0 instead.
