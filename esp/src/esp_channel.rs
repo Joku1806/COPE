@@ -262,11 +262,13 @@ impl EspChannel {
                     }
                 }
 
+                log::info!("Received complete frame collection: {:?}", collection);
+
                 // TODO: make this work without clone
                 match collection.decode() {
                     Ok(bytes) => match Packet::deserialize_from(bytes.as_slice()) {
                         Ok(p) => return Some(p),
-                        Err(e) => log::warn!("Could not decode received packet: {}", e),
+                        Err(e) => log::warn!("Could not decode received packet {:?}: {}", bytes, e),
                     },
                     Err(e) => log::warn!("Could not piece together frame collection: {:?}", e),
                 };
@@ -296,12 +298,14 @@ impl Channel for EspChannel {
                 }
             }
 
-            log::info!("Sending {:?} to {}", packet.coding_header(), mac);
+            log::info!("Sending {:?} to {}", packet, mac);
 
             let serialized = match packet.serialize_into() {
                 Ok(s) => s,
                 Err(e) => return Err(Box::new(EspChannelError::SerializationError(e))),
             };
+
+            log::info!("Serialized packet: {:?}", serialized);
 
             let mut frames = match FrameCollection::new().with_frame_size(ESPNOW_FRAME_SIZE) {
                 Ok(fc) => fc,
@@ -312,12 +316,16 @@ impl Channel for EspChannel {
                 return Err(Box::new(EspChannelError::FrameEncodingError(e)));
             }
 
+            log::info!("Encoded as Frames: {:?}", frames);
+
             for frame in frames.iter() {
                 // TODO: Make this work without clone
-                let serialized: Vec<u8> = frame.clone().unwrap().into();
+                let frame_serialized: Vec<u8> = frame.clone().unwrap().into();
+                log::info!("Transmitting: {:?}", frame_serialized);
+
                 let result = self
                     .espnow_driver
-                    .send(mac.into_array(), serialized.as_slice());
+                    .send(mac.into_array(), frame_serialized.as_slice());
 
                 // NOTE: We wait here until the TX callback ran and reset this flag. This is
                 // recommended practice in the esp-idf espnow guide. Apparently transmissions

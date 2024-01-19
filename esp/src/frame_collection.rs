@@ -119,7 +119,7 @@ impl Into<Vec<u8>> for Frame {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FrameCollection {
     // NOTE: Check if we can just store Vec<Frame>. We would need to check insertion behaviour for
     // that.
