@@ -149,6 +149,10 @@ impl FrameCollection {
         Ok(self)
     }
 
+    // NOTE: We only use this method for testing. Somehow rust-analyzer thinks this
+    // method is not used, but it is. Probably we use a custom test runner on the
+    // esp.
+    #[allow(dead_code)]
     pub fn with_magic(mut self, magic: u32) -> FrameCollection {
         self.magic = Some(magic);
         self
