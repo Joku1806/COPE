@@ -35,7 +35,7 @@ fn main() -> anyhow::Result<()> {
 
     let watchdog_config = TWDTConfig {
         duration: Duration::from_secs(30),
-        panic_on_trigger: true,
+        panic_on_trigger: false,
         // NOTE: Make sure that the IDLE task always runs on this core! The watchdog example uses
         // Core::Core0 instead.
         subscribed_idle_tasks: enum_set!(Core::Core1),
