@@ -186,6 +186,12 @@ impl EspChannel {
                 return Err(Box::new(EspChannelError::PacketDecodingError(e)));
             }
 
+            // NOTE: We reset the collection timestamp here, since a frame indicates that
+            // the packet is still in transit. If we would only set the timestamp for the
+            // first frame, we could prematurely drop large packets or packets sent during
+            // high congestion.
+            frame_collection.0 = SystemTime::now();
+
             Ok(())
         };
 
@@ -254,9 +260,9 @@ impl EspChannel {
     }
 
     fn collect_packet(&mut self) -> Option<Packet> {
-        for (_, (creation_time, collection)) in self.rx_buffer.lock().unwrap().iter() {
+        for (_, (last_frame_rx, collection)) in self.rx_buffer.lock().unwrap().iter() {
             if collection.is_complete() {
-                if let Ok(elapsed) = creation_time.elapsed() {
+                if let Ok(elapsed) = last_frame_rx.elapsed() {
                     if elapsed > RX_DRAIN_TIME {
                         log::warn!("RX Drain Time is set too low.");
                     }
