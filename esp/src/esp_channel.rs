@@ -265,31 +265,6 @@ impl EspChannel {
     pub fn get_mac(&self) -> MacAddress {
         self.own_mac
     }
-
-    fn collect_packet(&mut self) -> Option<Packet> {
-        for (_, (last_frame_rx, collection)) in self.rx_buffer.lock().unwrap().iter() {
-            if collection.is_complete() {
-                if let Ok(elapsed) = last_frame_rx.elapsed() {
-                    if elapsed > RX_DRAIN_TIME {
-                        log::warn!("RX Drain Time is set too low.");
-                    }
-                }
-
-                log::info!("Received complete frame collection: {:?}", collection);
-
-                // TODO: make this work without clone
-                match collection.decode() {
-                    Ok(bytes) => match Packet::deserialize_from(bytes.as_slice()) {
-                        Ok(p) => return Some(p),
-                        Err(e) => log::warn!("Could not decode received packet {:?}: {}", bytes, e),
-                    },
-                    Err(e) => log::warn!("Could not piece together frame collection: {:?}", e),
-                };
-            }
-        }
-
-        None
-    }
 }
 
 impl Channel for EspChannel {
@@ -377,6 +352,8 @@ impl Channel for EspChannel {
     }
 
     fn receive(&mut self) -> Option<Packet> {
+        let mut packet = None;
+
         self.rx_buffer
             .lock()
             .unwrap()
@@ -385,9 +362,32 @@ impl Channel for EspChannel {
                     Ok(elapsed) => elapsed,
                     Err(_) => Duration::ZERO,
                 };
-                elapsed < RX_DRAIN_TIME || collection.is_complete()
+
+                // NOTE: Any incomplete packets, where the last frame was received RX_DRAIN_TIME
+                // ago are assumed to be lost and should be removed.
+                if elapsed >= RX_DRAIN_TIME && !collection.is_complete() {
+                    return false;
+                }
+
+                // NOTE: Non-decodable packets, as well as the packet which is returned should
+                // be removed.
+                if collection.is_complete() && packet.is_none() {
+                    packet = collection
+                        .decode()
+                        .map_err(|e| log::warn!("Could not decode frame collection: {:?}", e))
+                        .ok()
+                        .and_then(|bytes| {
+                            Packet::deserialize_from(bytes.as_slice())
+                                .map_err(|e| log::warn!("Could not decode packet: {}", e))
+                                .ok()
+                        });
+
+                    return false;
+                }
+
+                return true;
             });
 
-        self.collect_packet()
+        packet
     }
 }
