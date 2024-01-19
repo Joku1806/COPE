@@ -14,7 +14,7 @@ use esp_idf_svc::{
     nvs::EspDefaultNvsPartition,
     sys::{
         esp, esp_wifi_set_promiscuous_filter, wifi_mode_t_WIFI_MODE_STA, wifi_promiscuous_filter_t,
-        wifi_second_chan_t_WIFI_SECOND_CHAN_NONE, WIFI_PROMIS_FILTER_MASK_ALL,
+        wifi_second_chan_t_WIFI_SECOND_CHAN_NONE, WIFI_PROMIS_FILTER_MASK_MGMT,
     },
     wifi::{EspWifi, WifiDeviceId},
 };
@@ -136,11 +136,10 @@ impl EspChannel {
             // NOTE: We need to be in promiscuous mode to overhear unicast packets
             // not addressed to us.
             esp!(esp_idf_svc::sys::esp_wifi_set_promiscuous(true))?;
-            // FIXME: Find out if EspNow frames are always received as a specific
-            // PromiscuousPktType in promiscuous mode. This would allow us to
-            // throw away all other frames more quickly.
+            // NOTE: Do we want to sniff ACKs here as well or do we handle that all through
+            // the COPE protocol ACKs at a higher abstraction level?
             let filter = wifi_promiscuous_filter_t {
-                filter_mask: WIFI_PROMIS_FILTER_MASK_ALL,
+                filter_mask: WIFI_PROMIS_FILTER_MASK_MGMT,
             };
             esp!(esp_wifi_set_promiscuous_filter(&filter))?;
         }
