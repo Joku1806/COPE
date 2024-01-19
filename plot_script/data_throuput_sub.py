@@ -3,7 +3,10 @@ import matplotlib.pyplot as plt
 import os
 import argparse
 
-def plot_bar_chart(csv_file):
+def strip_name(name):
+    return name.replace("log_", "").replace(".csv", "")
+
+def plot_bar_chart(csv_file, name, ax):
     # Read the CSV file into a DataFrame
     df = pd.read_csv(csv_file)
 
@@ -11,11 +14,8 @@ def plot_bar_chart(csv_file):
     values = df[labels].div(df["time"], axis=0).mean()
 
     # Plotting the bar chart
-    plt.rcParams.update({'font.size': 30})
-    plt.bar(labels, values, width=0.1, color='blue')
-    plt.ylabel('Throughput in bytes per sec', fontsize=22)
-    plt.title('Data Throughput (%s)' % (csv_file), fontsize=25)
-    plt.show()
+    ax.bar(labels, values, width=0.4, color='blue', align='center')
+    ax.set_title(f"Node {strip_name(name)}", fontsize=25)
 
 def main():
     parser = argparse.ArgumentParser(description="Print the contents of all files in a directory.")
@@ -27,16 +27,21 @@ def main():
         print(f"Error: Directory '{directory}' does not exist.")
         return
 
+    plt.rcParams.update({'font.size': 20})
     for root, _, files in os.walk(directory):
-        for file in files:
+        fig, axs = plt.subplots(1, len(files), sharey=True)
+        fig.suptitle('Data Throughput')
+        axs[0].set_ylabel("byte per sec")
+
+        for count, file in enumerate(files):
             csv_file = os.path.join(root, file)
             try:
-                plot_bar_chart(csv_file)
+                plot_bar_chart(csv_file, file, axs[count])
             except FileNotFoundError:
                 print(f"Error: File '{csv_file}' not found.")
             except pd.errors.EmptyDataError:
                 print(f"Error: File '{csv_file}' is empty or not in the expected CSV format.")
-
+    plt.show()
 
 if __name__ == "__main__":
     main()

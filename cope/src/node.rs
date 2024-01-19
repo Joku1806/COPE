@@ -83,7 +83,7 @@ impl Node {
             kbase: SimpleKBase::new(tx_whitelist.clone(), MAX_PACKET_POOL_SIZE),
             stats,
             last_stat_write: std::time::Instant::now(),
-            use_coding: true,
+            use_coding: false,
         }
     }
 

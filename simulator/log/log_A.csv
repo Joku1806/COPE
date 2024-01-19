@@ -1,0 +1,4 @@
+time,send_to_B,rec_from_C,packets_send,packets_rec,total_data_send,total_data_rec
+30,0,0,1881,3757,150060,299960
+30,0,0,1877,3765,149993,300041
+30,0,0,1864,3748,149970,299989
