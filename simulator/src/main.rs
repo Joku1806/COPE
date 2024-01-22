@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::mpsc::channel;
 
+use simple_logger::SimpleLogger;
+
 use cope::config::CONFIG;
 use cope::Node;
 use simulator_channel::SimulatorChannel;
@@ -8,6 +10,7 @@ use simulator_channel::SimulatorChannel;
 mod simulator_channel;
 
 fn main() {
+    SimpleLogger::new().env().init().unwrap();
     let (tx, rx) = channel();
     let mut node_channels = HashMap::new();
 

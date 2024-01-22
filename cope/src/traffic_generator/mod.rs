@@ -1,7 +1,5 @@
 use cope_config::types::node_id::NodeID;
 
-use crate::packet::{PacketID, CodingInfo};
-
 use super::packet::PacketBuilder;
 
 pub mod greedy_strategy;

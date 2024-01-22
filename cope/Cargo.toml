@@ -18,6 +18,8 @@ serde = { version = "1.0.192", features = ["derive"] }
 cope_config = { path = "cope_config"}
 chrono = "0.4.31"
 colored = "2.0.4"
+log = "0.4.20"
+simple_logger = "4.3.3"
 
 [build-dependencies]
 serde = { version = "1.0.0", features = ["derive"] }

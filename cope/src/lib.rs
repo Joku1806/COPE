@@ -6,7 +6,6 @@ pub mod topology;
 pub mod traffic_generator;
 pub mod packet_pool;
 pub mod kbase;
-pub mod util;
 pub mod coding;
 
 pub use node::Node;
