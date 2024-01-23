@@ -5,6 +5,7 @@ use std::vec::Vec;
 use cope_config::types::node_id::NodeID;
 
 use super::PacketData;
+use super::Ack;
 
 pub type PacketID = u16;
 
@@ -26,14 +27,14 @@ pub enum PacketError {
 #[derive(Debug)]
 pub enum PacketReceiver {
     Single(NodeID),
-    Multi
+    Multi,
 }
 
 #[derive(Debug)]
 pub enum CodingHeader {
     Native(CodingInfo),
     Encoded(Vec<CodingInfo>),
-    ReportOnly
+    ReportOnly,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
@@ -54,16 +55,16 @@ pub struct ReceptionReport {
 pub struct Packet {
     id: PacketID,
     sender: NodeID,
-    // NOTE: These could also be HashMaps for easy access.
-    // But I am not sure if/when this is needed,
-    // so lets stay close to the definition in the paper.
     coding_header: Vec<CodingInfo>,
     reception_header: Vec<ReceptionReport>,
+    ack_header: Vec<Ack>,
     data: PacketData,
 }
 
 impl Packet {
-    pub fn sender(&self) -> NodeID { self.sender }
+    pub fn sender(&self) -> NodeID {
+        self.sender
+    }
     pub fn receiver(&self) -> PacketReceiver {
         if self.coding_header.len() == 1 {
             let receiver = self.coding_header.first().unwrap().nexthop;
@@ -72,9 +73,19 @@ impl Packet {
             PacketReceiver::Multi
         }
     }
-    pub fn id(&self) -> PacketID { self.id }
-    pub fn data(&self) -> &PacketData { &self.data }
-    pub fn coding_header(&self) -> &Vec<CodingInfo> { &self.coding_header }
+    pub fn id(&self) -> PacketID {
+        self.id
+    }
+    pub fn data(&self) -> &PacketData {
+        &self.data
+    }
+    pub fn coding_header(&self) -> &Vec<CodingInfo> {
+        &self.coding_header
+    }
+
+    pub fn ack_header(&self) -> &[Ack] {
+        &self.ack_header
+    }
 
     pub fn set_sender(mut self, sender: NodeID) -> Self {
         self.sender = sender;
@@ -97,6 +108,7 @@ pub struct PacketBuilder {
     receiver: NodeID,
     coding_header: Vec<CodingInfo>,
     reception_header: Vec<ReceptionReport>,
+    ack_header: Vec<Ack>,
     data: PacketData,
 }
 
@@ -152,11 +164,17 @@ impl PacketBuilder {
         self
     }
 
+    pub fn ack_header(mut self, ack_header: Vec<Ack>) -> Self {
+        self.ack_header = ack_header;
+        self
+    }
 
     pub fn single_coding_header(mut self, source: NodeID, nexthop: NodeID) -> Self {
         self.coding_header = vec![CodingInfo {
-            source, nexthop, id: self.id
-            }];
+            source,
+            nexthop,
+            id: self.id,
+        }];
         self
     }
 
@@ -168,6 +186,7 @@ impl PacketBuilder {
             sender: self.sender,
             coding_header: self.coding_header,
             reception_header: self.reception_header,
+            ack_header: self.ack_header,
             data: self.data,
         })
     }

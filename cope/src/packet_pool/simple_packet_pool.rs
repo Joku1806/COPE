@@ -3,11 +3,11 @@ use cope_config::types::node_id::NodeID;
 use super::{PacketPool, PPEntry};
 
 // NOTE: This is the most simple way to implement a packet pool
-// NOTE: It will store at most max_size elements
-// NOTE: If it tries to store more it replaces the oldes element
-// NOTE: We could use a ring buffer but this would be more complex
-// NOTE: Using this setup, the relay will also forget
-// NOTE: GC does nothing
+// It will store at most max_size elements
+// If it tries to store more it replaces the oldes element
+// We could use a ring buffer but this would be more complex
+// Using this setup, the relay will also forget
+// GC does nothing
 pub struct SimplePacketPool{
     queue: Vec<PPEntry>,
     max_size: usize,

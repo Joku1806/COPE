@@ -33,6 +33,7 @@ impl CodingStrategy for LeafNodeCoding {
                 log::info!("[Node {}]: Not a next hop of Packet.", topology.id());
             } else if let Some(data) = decode_packet(topology.id(), &packet, &mut self.packet_pool)
             {
+                // TODO: Schedule Ack event
                 log::info!("[Node {}]: Decoded Packet to {:?}.", topology.id(), data);
             } else {
                 log::info!("[Node {}]: Could not decode Packet.", topology.id());
@@ -47,6 +48,7 @@ impl CodingStrategy for LeafNodeCoding {
         if let Some(builder) = self.generator.generate() {
             // FIXME: handle this error
             // TODO: add reception report
+            // TODO: add acks to header
             let packet = builder.build().unwrap();
             // TODO: There is the possible Issue that the packet is never send, in this case we
             // should not save it in packet_pool
