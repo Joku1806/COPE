@@ -1,6 +1,6 @@
-use crate::packet::{Packet, CodingInfo};
+use super::{PPEntry, PacketPool};
+use crate::packet::{CodingInfo, Packet};
 use cope_config::types::node_id::NodeID;
-use super::{PacketPool, PPEntry};
 
 // NOTE: This is the most simple way to implement a packet pool
 // It will store at most max_size elements
@@ -8,14 +8,17 @@ use super::{PacketPool, PPEntry};
 // We could use a ring buffer but this would be more complex
 // Using this setup, the relay will also forget
 // GC does nothing
-pub struct SimplePacketPool{
+pub struct SimplePacketPool {
     queue: Vec<PPEntry>,
     max_size: usize,
 }
 
 impl SimplePacketPool {
-    pub fn new(max_size: usize) -> Self{
-        Self { queue: Vec::new(), max_size}
+    pub fn new(max_size: usize) -> Self {
+        Self {
+            queue: Vec::new(),
+            max_size,
+        }
     }
 }
 
@@ -25,7 +28,9 @@ impl PacketPool for SimplePacketPool {
     }
 
     fn pop_front(&mut self) -> Option<PPEntry> {
-        if self.queue.first().is_none() { return None; }
+        if self.queue.first().is_none() {
+            return None;
+        }
         Some(self.queue.remove(0))
     }
 
@@ -34,11 +39,13 @@ impl PacketPool for SimplePacketPool {
     }
 
     fn pop_nexthop_front(&mut self, nexthop: NodeID) -> Option<PPEntry> {
-        let Some(pos) = self.queue.iter().position(|x| x.0.nexthop == nexthop) else { return None };
+        let Some(pos) = self.queue.iter().position(|x| x.0.nexthop == nexthop) else {
+            return None;
+        };
         Some(self.queue.remove(pos))
     }
 
-    fn position(&mut self, info: &CodingInfo) -> Option<usize> {
+    fn position(&self, info: &CodingInfo) -> Option<usize> {
         self.queue.iter().position(|x| x.0 == *info)
     }
 
@@ -48,7 +55,9 @@ impl PacketPool for SimplePacketPool {
 
     fn push_packet(&mut self, packet: Packet) {
         let is_at_max_size = self.queue.len() >= self.max_size;
-        if  is_at_max_size { self.pop_front(); }
+        if is_at_max_size {
+            self.pop_front();
+        }
         if packet.coding_header().len() != 1 {
             panic!("Expected Native Packet");
         }
@@ -61,5 +70,9 @@ impl PacketPool for SimplePacketPool {
 
     fn size(&self) -> usize {
         self.queue.len()
+    }
+
+    fn get_ref(&self, pos: usize) -> Option<&PPEntry> {
+        self.queue.get(pos)
     }
 }

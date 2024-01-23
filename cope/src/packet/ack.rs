@@ -6,8 +6,8 @@ use super::CodingInfo;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Ack {
-    source: NodeID,
-    packets: Vec<CodingInfo>,
+    pub source: NodeID,
+    pub packets: Vec<CodingInfo>,
 }
 
 impl Ack {
