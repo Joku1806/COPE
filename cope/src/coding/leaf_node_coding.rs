@@ -9,12 +9,14 @@ use crate::{
 
 use super::{
     decode_util::{ids_for_decoding, is_next_hop},
-    CodingError, CodingStrategy,
+    retrans_queue::RetransQueue,
+    CodingError, CodingStrategy, QUEUE_SIZE, RETRANS_DURATION,
 };
 
 pub struct LeafNodeCoding {
     generator: TrafficGenerator,
     packet_pool: SimplePacketPool,
+    retrans_queue: RetransQueue,
     acks: Vec<CodingInfo>,
 }
 
@@ -22,7 +24,8 @@ impl LeafNodeCoding {
     pub fn new(generator: TrafficGenerator) -> Self {
         Self {
             generator,
-            packet_pool: SimplePacketPool::new(8),
+            packet_pool: SimplePacketPool::new(QUEUE_SIZE),
+            retrans_queue: RetransQueue::new(QUEUE_SIZE, RETRANS_DURATION),
             acks: vec![],
         }
     }
@@ -35,12 +38,22 @@ impl CodingStrategy for LeafNodeCoding {
             //store for coding
             return Ok(());
         }
+        // handle acks
+        let acks = packet.ack_header();
+        for ack in acks {
+            for info in ack.packets() {
+                log::info!("[Node {}]: Packet {:?} was acked.", topology.id(), info);
+                self.retrans_queue.remove_packet(info);
+            }
+        }
+
         // check if node is next_hop for packet
         if !is_next_hop(topology.id(), &packet) {
             log::info!("[Node {}]: Not a next hop of Packet.", topology.id());
             return Ok(());
         }
         // decode
+        // TODO: add acks to the thing
         let (ids, info) = ids_for_decoding(topology.id(), packet, &self.packet_pool)?;
         let decoded_data = decode(&ids, packet.data(), &self.packet_pool);
         log::info!("[Node {}]: Decoded into {:?}", topology.id(), decoded_data);
@@ -50,8 +63,7 @@ impl CodingStrategy for LeafNodeCoding {
     }
 
     fn handle_send(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError> {
-        if let Some(builder) = self.generator.generate() {
-            // FIXME: handle this error
+        if let Some(builder) = self.retrans_queue.packet_to_retrans {
             // TODO: add reception report
 
             // add acks to header
@@ -64,6 +76,46 @@ impl CodingStrategy for LeafNodeCoding {
             // FIXME: There is the possible Issue that the packet is never send, in this case we
             // should not save it in packet_pool
             self.packet_pool.push_packet(packet.clone());
+
+            let Some(info) = packet.coding_header().first() else {
+                return Err(CodingError::DefectPacketError(
+                    "Packet should have coding info".into(),
+                ));
+            };
+
+            self.retrans_queue
+                .push_new((info.clone(), packet.data().clone()));
+            return Ok(Some(packet));
+        }
+
+        if self.retrans_queue.is_full() {
+            return Err(CodingError::FullRetransQueue(
+                "Cannot send new packet, without dropping old Packet.".into(),
+            ));
+        }
+
+        if let Some(builder) = self.generator.generate() {
+            // TODO: add reception report
+
+            // add acks to header
+            let ack = Ack {
+                source: topology.id(),
+                packets: std::mem::take(&mut self.acks),
+            };
+
+            let packet = builder.ack_header(vec![ack]).build().unwrap();
+            // FIXME: There is the possible Issue that the packet is never send, in this case we
+            // should not save it in packet_pool
+            self.packet_pool.push_packet(packet.clone());
+
+            let Some(info) = packet.coding_header().first() else {
+                return Err(CodingError::DefectPacketError(
+                    "Packet should have coding info".into(),
+                ));
+            };
+
+            self.retrans_queue
+                .push_new((info.clone(), packet.data().clone()));
             return Ok(Some(packet));
         }
         Ok(None)

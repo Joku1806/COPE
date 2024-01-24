@@ -24,7 +24,7 @@ impl RetransQueue {
         }
     }
 
-    pub fn is_not_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.queue.len() >= self.max_count
     }
 

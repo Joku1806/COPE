@@ -1,29 +1,29 @@
-use std::time::Duration;
-
 use cope_config::types::node_id::NodeID;
 
 use crate::{
     kbase::{KBase, SimpleKBase},
-    packet::{CodingInfo, PacketBuilder, PacketData},
+    packet::{CodingInfo, PacketBuilder, PacketData, Ack},
     packet_pool::{PacketPool, SimplePacketPool},
     topology::Topology,
     Packet,
 };
 
-use super::{retrans_queue::RetransQueue, CodingError, CodingStrategy};
+use super::{retrans_queue::RetransQueue, CodingError, CodingStrategy, QUEUE_SIZE, RETRANS_DURATION};
 
 pub struct RelayNodeCoding {
     packet_pool: SimplePacketPool,
     kbase: SimpleKBase,
     retrans_queue: RetransQueue,
+    acks: Vec<Ack>,
 }
 
 impl RelayNodeCoding {
     pub fn new(tx_list: Vec<NodeID>) -> Self {
         Self {
-            packet_pool: SimplePacketPool::new(8),
-            kbase: SimpleKBase::new(tx_list, 8),
-            retrans_queue: RetransQueue::new(8, Duration::from_millis(1000)),
+            packet_pool: SimplePacketPool::new(QUEUE_SIZE),
+            kbase: SimpleKBase::new(tx_list, QUEUE_SIZE),
+            retrans_queue: RetransQueue::new(QUEUE_SIZE, RETRANS_DURATION),
+            acks: vec![],
         }
     }
 
