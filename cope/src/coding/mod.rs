@@ -24,7 +24,9 @@ pub enum CodingError {
 
 impl fmt::Display for CodingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "TODO: Write Error Messages!")
+        match self {
+            Self::DecodeError(str) => write!(f, "[DecodeError]: {}", str),
+        }
     }
 }
 
