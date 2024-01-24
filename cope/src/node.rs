@@ -21,6 +21,7 @@ pub struct Node {
     topology: Topology,
     channel: Box<dyn Channel + Send>,
     coding: Box<dyn CodingStrategy + Send>,
+    neigh_segno_counter: Vec<usize>,
 }
 
 impl Node {
@@ -51,6 +52,7 @@ impl Node {
             TrafficGeneratorType::Random(rate) => Box::new(RandomStrategy::new(rate)),
             TrafficGeneratorType::Periodic(duration) => Box::new(PeriodicStrategy::new(duration)),
         };
+        let neigh_segno_counter =  vec![0; rx_whitelist.len()];
         let topology = Topology::new(id, CONFIG.relay, rx_whitelist, tx_whitelist.clone());
         let generator = TrafficGenerator::new(strategy, tx_whitelist.clone(), id);
         let coding: Box<dyn CodingStrategy + Send> = match topology.is_relay() {
@@ -63,12 +65,17 @@ impl Node {
             topology,
             channel,
             coding,
+            neigh_segno_counter,
         }
     }
 
     pub fn tick(&mut self) {
-        // send
-        let packet_to_send = match self.coding.handle_send(&self.topology) {
+        self.receive();
+        self.transmit();
+    }
+
+    fn transmit(&mut self) {
+        let packet_to_send = match self.coding.handle_tx(&self.topology) {
             Ok(opt) => opt,
             Err(e) => {
                 log::error!("{}", e);
@@ -78,22 +85,25 @@ impl Node {
 
         if let Some(packet) = packet_to_send {
             log::info!("[Node {}]: Send {:?}", self.id, packet.coding_header());
-            self.channel.transmit(&packet);
+            if let Err(e) = self.channel.transmit(&packet) {
+                log::error!("{:?}", e);
+            }
             //TODO: handle error
         }
+    }
 
+    fn receive(&mut self) {
         // receive
         if let Some(packet) = self.channel.receive() {
             if !self.topology.can_receive_from(packet.sender()) {
                 return;
             }
             log::info!("[Node {}]: Received {:?}", self.id, &packet.coding_header());
-            let result = self.coding.handle_receive(&packet, &self.topology);
+            let result = self.coding.handle_rx(&packet, &self.topology);
             if let Err(e) = result {
                 log::error!("{}", e);
             }
             //TODO: handle error
         }
-
     }
 }

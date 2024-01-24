@@ -1,6 +1,6 @@
 use crate::{
     coding::decode_util::{decode, remove_from_pool},
-    packet::{Ack, CodingInfo},
+    packet::{Ack, CodingInfo, PacketBuilder},
     packet_pool::{PacketPool, SimplePacketPool},
     topology::Topology,
     traffic_generator::TrafficGenerator,
@@ -32,7 +32,7 @@ impl LeafNodeCoding {
 }
 
 impl CodingStrategy for LeafNodeCoding {
-    fn handle_receive(&mut self, packet: &Packet, topology: &Topology) -> Result<(), CodingError> {
+    fn handle_rx(&mut self, packet: &Packet, topology: &Topology) -> Result<(), CodingError> {
         let is_from_relay = packet.sender() == topology.relay();
         if !is_from_relay {
             //store for coding
@@ -46,6 +46,7 @@ impl CodingStrategy for LeafNodeCoding {
                 self.retrans_queue.remove_packet(info);
             }
         }
+        log::info!("[Node{}]: Retrans Queue Size {:?}", topology.id(), self.retrans_queue.len());
 
         // check if node is next_hop for packet
         if !is_next_hop(topology.id(), &packet) {
@@ -62,8 +63,12 @@ impl CodingStrategy for LeafNodeCoding {
         return Ok(());
     }
 
-    fn handle_send(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError> {
-        if let Some(builder) = self.retrans_queue.packet_to_retrans {
+    fn handle_tx(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError> {
+        if let Some((info, data)) = self.retrans_queue.packet_to_retrans() {
+            let builder = PacketBuilder::new()
+                .sender(topology.id())
+                .data(data)
+                .coding_header(vec![info]);
             // TODO: add reception report
 
             // add acks to header
@@ -73,8 +78,6 @@ impl CodingStrategy for LeafNodeCoding {
             };
 
             let packet = builder.ack_header(vec![ack]).build().unwrap();
-            // FIXME: There is the possible Issue that the packet is never send, in this case we
-            // should not save it in packet_pool
             self.packet_pool.push_packet(packet.clone());
 
             let Some(info) = packet.coding_header().first() else {
@@ -82,15 +85,12 @@ impl CodingStrategy for LeafNodeCoding {
                     "Packet should have coding info".into(),
                 ));
             };
-
-            self.retrans_queue
-                .push_new((info.clone(), packet.data().clone()));
             return Ok(Some(packet));
         }
 
         if self.retrans_queue.is_full() {
             return Err(CodingError::FullRetransQueue(
-                "Cannot send new packet, without dropping old Packet.".into(),
+                format!("[Node {}]: Cannot send new packet, without dropping old Packet.", topology.id()),
             ));
         }
 
@@ -104,8 +104,6 @@ impl CodingStrategy for LeafNodeCoding {
             };
 
             let packet = builder.ack_header(vec![ack]).build().unwrap();
-            // FIXME: There is the possible Issue that the packet is never send, in this case we
-            // should not save it in packet_pool
             self.packet_pool.push_packet(packet.clone());
 
             let Some(info) = packet.coding_header().first() else {

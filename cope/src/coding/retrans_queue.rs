@@ -1,7 +1,8 @@
-use std::time::{Instant, Duration};
+use std::{time::{Instant, Duration}, usize};
 
 use crate::packet::{CodingInfo, PacketData};
 
+#[derive(Debug)]
 pub struct RetransEntry {
     data: PacketData,
     info: CodingInfo,
@@ -9,6 +10,7 @@ pub struct RetransEntry {
     last_trans: Instant,
 }
 
+#[derive(Debug)]
 pub struct RetransQueue {
     queue: Vec<RetransEntry>,
     max_count: usize,
@@ -26,6 +28,14 @@ impl RetransQueue {
 
     pub fn is_full(&self) -> bool {
         self.queue.len() >= self.max_count
+    }
+
+    pub fn conatains(&self, info: &CodingInfo) -> bool {
+        self.queue.iter().find(|entry| entry.info == *info).is_some()
+    }
+
+    pub fn len(&self) -> usize {
+        self.queue.len()
     }
 
     pub fn packet_to_retrans(&mut self) -> Option<(CodingInfo, PacketData)> {

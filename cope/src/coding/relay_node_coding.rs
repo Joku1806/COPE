@@ -2,13 +2,15 @@ use cope_config::types::node_id::NodeID;
 
 use crate::{
     kbase::{KBase, SimpleKBase},
-    packet::{CodingInfo, PacketBuilder, PacketData, Ack},
+    packet::{Ack, CodingInfo, PacketBuilder, PacketData},
     packet_pool::{PacketPool, SimplePacketPool},
     topology::Topology,
-    Packet,
+    Packet, coding,
 };
 
-use super::{retrans_queue::RetransQueue, CodingError, CodingStrategy, QUEUE_SIZE, RETRANS_DURATION};
+use super::{
+    retrans_queue::RetransQueue, CodingError, CodingStrategy, QUEUE_SIZE, RETRANS_DURATION,
+};
 
 pub struct RelayNodeCoding {
     packet_pool: SimplePacketPool,
@@ -46,20 +48,44 @@ impl RelayNodeCoding {
         true
     }
 
-    // NOTE: id is just for logging
-    fn packet_to_send(&mut self, id: NodeID) -> Option<(CodingInfo, PacketData)> {
-        if let Some((info, data)) = self.retrans_queue.packet_to_retrans() {
-            log::info!(
-                "[Relay {}], Packet {:?} was not acked. Retransimitting",
-                id,
-                info
-            );
-            return Some((info, data));
+    fn has_coding_opp(&self) -> bool {
+        true
+    }
+
+    fn code_packet(
+        &mut self,
+        packet: (CodingInfo, PacketData),
+        topo: &Topology,
+    ) -> Result<Packet, CodingError> {
+        let mut packets: Vec<(CodingInfo, PacketData)> = vec![packet];
+        for &nexthop in topo.txlist() {
+            let Some(packet) = self.packet_pool.peek_nexthop_front(nexthop) else {
+                continue;
+            };
+
+            if self.all_nexhops_can_decode(&packets, packet) {
+                let p = self.packet_pool.pop_nexthop_front(nexthop).unwrap();
+                packets.push(p);
+            }
         }
-        if let Some(next_packet) = self.packet_pool.pop_front() {
-            return Some(next_packet);
+        let (header, data) = encode(&packets);
+        // schedule retransmission
+        for p in &packets {
+            if self.retrans_queue.conatains(&p.0) {
+                self.retrans_queue.push_new(p.clone());
+            }
         }
-        None
+
+        let coded_packet = PacketBuilder::new()
+            .sender(topo.id())
+            .data(data)
+            .coding_header(header)
+            .ack_header(std::mem::take(&mut self.acks))
+            .build()
+            .unwrap();
+        log::info!("[Relay {}]: {:?}", topo.id(), coded_packet.ack_header());
+
+        Ok(coded_packet)
     }
 }
 
@@ -74,7 +100,7 @@ fn encode(packets: &Vec<(CodingInfo, PacketData)>) -> (Vec<CodingInfo>, PacketDa
 }
 
 impl CodingStrategy for RelayNodeCoding {
-    fn handle_receive(&mut self, packet: &Packet, topology: &Topology) -> Result<(), CodingError> {
+    fn handle_rx(&mut self, packet: &Packet, topology: &Topology) -> Result<(), CodingError> {
         let coding_info = packet.coding_header().first().unwrap();
         // TODO: handle Acks
         let acks = packet.ack_header();
@@ -83,6 +109,7 @@ impl CodingStrategy for RelayNodeCoding {
                 log::info!("[Relay {}]: Packet {:?} was acked.", topology.id(), info);
                 self.retrans_queue.remove_packet(info);
             }
+            self.acks.push(ack.clone());
         }
         // append knowledge base
         self.kbase.insert(packet.sender(), coding_info.clone());
@@ -97,52 +124,28 @@ impl CodingStrategy for RelayNodeCoding {
         Ok(())
     }
 
-    fn handle_send(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError> {
+    fn handle_tx(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError> {
         // TODO: wait for coding Opportunities
 
-        let Some(packet_to_send) = self.packet_to_send(topology.id()) else {
+        if let Some(packet) = self.retrans_queue.packet_to_retrans() {
+            let coded_packet = self.code_packet(packet, topology)?;
+            return Ok(Some(coded_packet));
+        }
+
+        if self.retrans_queue.is_full() {
+            return Err(CodingError::FullRetransQueue(
+                format!("[Relay {}]:Cannot send new packet, without dropping old Packet.", topology.id()),
+            ));
+        }
+
+        if !self.has_coding_opp() {
+            return Ok(None);
+        }
+
+        let Some(packet) = self.packet_pool.pop_front() else {
             return Ok(None);
         };
-
-        log::info!(
-            "[Relay {}]: Starts forwarding packet {:?}",
-            topology.id(),
-            packet_to_send.0
-        );
-
-        let mut packets: Vec<(CodingInfo, PacketData)> = vec![packet_to_send];
-        for &nexthop in topology.txlist() {
-            let Some(packet) = self.packet_pool.peek_nexthop_front(nexthop) else {
-                continue;
-            };
-
-            if self.all_nexhops_can_decode(&packets, packet) {
-                let p = self.packet_pool.pop_nexthop_front(nexthop).unwrap();
-                packets.push(p);
-            }
-        }
-        log::info!(
-            "[Relay {}]: Found {} packets to code.",
-            topology.id(),
-            packets.len()
-        );
-        // Remove packets from packet_pool
-        // Encode if possible
-        let (header, data) = encode(&packets);
-        log::info!("[Relay {}]: Encoded to {:?}.", topology.id(), &header,);
-        // TODO: add acks to header
-
-        // schedule retransmission
-        for p in &packets {
-            self.retrans_queue.push_new(p.clone());
-        }
-
-        let coded_packet = PacketBuilder::new()
-            .sender(topology.id())
-            .data(data)
-            .coding_header(header)
-            .build()
-            .unwrap();
+        let coded_packet = self.code_packet(packet, topology)?;
 
         Ok(Some(coded_packet))
     }
