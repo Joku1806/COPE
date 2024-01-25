@@ -3,18 +3,18 @@ use std::usize;
 use cope_config::types::node_id::NodeID;
 use cope_config::types::traffic_generator_type::TrafficGeneratorType;
 
-use crate::kbase::{SimpleKBase, KBase};
-use crate::{channel::Channel, packet::CodingInfo};
+use super::packet_pool::{PacketPool, SimplePacketPool};
 use crate::config::CONFIG;
+use crate::kbase::{KBase, SimpleKBase};
 use crate::packet::{Packet, PacketBuilder, PacketData};
 use crate::topology::Topology;
+use crate::traffic_generator::greedy_strategy::GreedyStrategy;
 use crate::traffic_generator::none_strategy::NoneStrategy;
 use crate::traffic_generator::periodic_strategy::PeriodicStrategy;
 use crate::traffic_generator::poisson_strategy::PoissonStrategy;
 use crate::traffic_generator::random_strategy::RandomStrategy;
 use crate::traffic_generator::{TGStrategy, TrafficGenerator};
-use crate::traffic_generator::greedy_strategy::GreedyStrategy;
-use super::packet_pool::{PacketPool, SimplePacketPool};
+use crate::{channel::Channel, packet::CodingInfo};
 
 use crate::log;
 use chrono::prelude::{DateTime, Local};
@@ -31,9 +31,8 @@ pub struct Node {
     tx_whitelist: Vec<NodeID>,
     packet_pool: SimplePacketPool,
     last_fifo_flush: std::time::Instant,
-    kbase: SimpleKBase
+    kbase: SimpleKBase,
 }
-
 
 impl Node {
     pub fn new(
@@ -99,35 +98,51 @@ impl Node {
             self.kbase.insert(packet.sender(), coding_info.clone());
             // add to packet pool
             self.packet_pool.push_packet(packet);
-            log!("[Relay {}]: Has stored {} packages and knows about {}", self.id, self.packet_pool.size(), self.kbase.size());
+            log!(
+                "[Relay {}]: Has stored {} packages and knows about {}",
+                self.id,
+                self.packet_pool.size(),
+                self.kbase.size()
+            );
         }
 
         // NOTE: we always take some time before we flush fifo to enable coding opportunities
-        let  time_elapsed = self.last_fifo_flush.elapsed();
-        if time_elapsed < std::time::Duration::from_millis(800) { return; }
+        let time_elapsed = self.last_fifo_flush.elapsed();
+        if time_elapsed < std::time::Duration::from_millis(800) {
+            return;
+        }
         self.last_fifo_flush = std::time::Instant::now();
         log!("[Relay {}]: Attepts to forward packets.", self.id);
 
         // deque head of output queue
         if let Some(packet) = self.packet_pool.pop_front() {
-            log!("[Relay {}]: Starts forwarding packet {:?}", self.id, packet.0);
+            log!(
+                "[Relay {}]: Starts forwarding packet {:?}",
+                self.id,
+                packet.0
+            );
             log!("[Relay {}]: Looking for Coding Opportunities", self.id);
 
             let mut packets: Vec<(CodingInfo, PacketData)> = vec![packet];
             for &nexthop in &self.tx_whitelist {
-                let Some(packet_i) = self.packet_pool.peek_nexthop_front(nexthop)
-                else { continue; };
+                let Some(packet_i) = self.packet_pool.peek_nexthop_front(nexthop) else {
+                    continue;
+                };
 
                 if self.all_nexhops_can_decode(&packets, packet_i) {
                     let p = self.packet_pool.pop_nexthop_front(nexthop).unwrap();
                     packets.push(p);
                 }
             }
-            log!("[Relay {}]: Found {} packets to code", self.id, packets.len());
+            log!(
+                "[Relay {}]: Found {} packets to code",
+                self.id,
+                packets.len()
+            );
             // Remove packets from packet_pool
             // Encode if possible
             let (header, data) = self.encode(&packets);
-            log!("[Relay {}]: Encoded to {:?}, {:?}", self.id ,&header, &data);
+            log!("[Relay {}]: Encoded to {:?}, {:?}", self.id, &header, &data);
             // TODO: add acks to header
             let pack = PacketBuilder::new()
                 .sender(self.id)
@@ -137,19 +152,16 @@ impl Node {
                 .unwrap();
             // If encoded schedule retransmission
             // send
-            self.channel.transmit(&pack);
+            // TODO: Error handling
+            let _ = self.channel.transmit(&pack);
             log!("[Relay {}]: Forwarded package ", self.id);
-        }else {
+        } else {
             log!("[Relay {}]: No Packets to forward", self.id);
         }
     }
 
     fn encode(&self, packets: &Vec<(CodingInfo, PacketData)>) -> (Vec<CodingInfo>, PacketData) {
-        let info = packets
-            .iter()
-            .cloned()
-            .map(|p| p.0)
-            .collect();
+        let info = packets.iter().cloned().map(|p| p.0).collect();
         let data = packets
             .iter()
             .cloned()
@@ -160,17 +172,20 @@ impl Node {
 
     // NOTE: Assume that for each next_hop we only add 1 Package
     // therefore return true if each next_hop knows exactly packets.add(packet).len()-1
-    fn all_nexhops_can_decode( &self,
+    fn all_nexhops_can_decode(
+        &self,
         packets: &Vec<(CodingInfo, PacketData)>,
         packet: &(CodingInfo, PacketData),
     ) -> bool {
         let iter = std::iter::once(packet).chain(packets);
-        for (CodingInfo{ nexthop, ..},_) in iter {
+        for (CodingInfo { nexthop, .. }, _) in iter {
             let iter1 = std::iter::once(packet).chain(packets);
             for (info, _) in iter1 {
                 let knows = self.kbase.knows(nexthop, info);
                 let is_nexthop = *nexthop == info.nexthop;
-                if !knows && ! is_nexthop { return false; }
+                if !knows && !is_nexthop {
+                    return false;
+                }
             }
         }
         true
@@ -185,14 +200,18 @@ impl Node {
             // TODO: add reception report
             self.channel.transmit(&packet);
             self.packet_pool.push_packet(packet);
-            log!("[Node {}]: Has stored {} packages.", self.id, self.packet_pool.size());
+            log!(
+                "[Node {}]: Has stored {} packages.",
+                self.id,
+                self.packet_pool.size()
+            );
         }
 
         // receive
         if let Some(packet) = self.channel.receive() {
             if self.topology.can_receive_from(packet.sender()) {
                 log!("[Node {}]: Received {:?}", self.id, packet.coding_header());
-                if packet.sender() == CONFIG.relay{
+                if packet.sender() == CONFIG.relay {
                     // decode
                     if !self.is_next_hop(&packet) {
                         log!("[Node {}]: Not a next hop of Packet.", self.id);
@@ -201,7 +220,11 @@ impl Node {
                     } else {
                         log!("[Node {}]: Could not decode Packet.", self.id);
                     }
-                    log!("[Node {}]: Has stored {} packages.", self.id, self.packet_pool.size());
+                    log!(
+                        "[Node {}]: Has stored {} packages.",
+                        self.id,
+                        self.packet_pool.size()
+                    );
                 } else {
                     //store for coding
                 }
@@ -210,22 +233,27 @@ impl Node {
     }
 
     fn is_next_hop(&self, packet: &Packet) -> bool {
-        packet.coding_header().iter().find(|&x| x.nexthop == self.id).is_some()
+        packet
+            .coding_header()
+            .iter()
+            .find(|&x| x.nexthop == self.id)
+            .is_some()
     }
 
     // FIXME: Refactor this mess of a function
     fn decode(&mut self, packet: &Packet) -> Option<PacketData> {
         let mut packet_indices: Vec<usize> = vec![];
         for info in packet.coding_header() {
-            let Some(index) = self.packet_pool.position(&info)
-            else{
-                if info.nexthop == self.id { continue; }
+            let Some(index) = self.packet_pool.position(&info) else {
+                if info.nexthop == self.id {
+                    continue;
+                }
                 return None;
             };
             packet_indices.push(index);
         }
         if packet_indices.len() != packet.coding_header().len() - 1 {
-            return None
+            return None;
         }
 
         let mut data: PacketData = packet.data().clone();

@@ -17,7 +17,7 @@ use esp_idf_svc::{
     },
     wifi::{EspWifi, WifiDeviceId},
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
@@ -97,12 +97,12 @@ impl EspChannel {
                 // TODO: Better error handling!
                 let espnow_frame = match EspNowFrame::try_from(wifi_frame.get_data()) {
                     Ok(f) => f,
-                    Err(e) => return Ok(()),
+                    Err(_) => return Ok(()),
                 };
 
                 let partial_frame = match Frame::try_from(espnow_frame.get_body()) {
                     Ok(f) => f,
-                    Err(e) => return Ok(()),
+                    Err(_) => return Ok(()),
                 };
 
                 let mut buffer = rx_buffer_clone.lock().unwrap();

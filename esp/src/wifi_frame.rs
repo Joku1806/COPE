@@ -2,7 +2,6 @@ use bitvec::{field::BitField, prelude as bv, view::BitView};
 
 #[derive(Debug)]
 pub enum WifiFrameDecodingError {
-    InvalidLength,
     InvalidSigMode,
     InvalidChannelBandwidth,
     InvalidChannelEstimateSmootingValue,

@@ -1,13 +1,12 @@
 use super::Packet;
 use std::collections::VecDeque;
 
-trait CodingStrategy {
-}
+trait CodingStrategy {}
 struct NodeCodingNone {
-    packet_fifo: VecDeque<Packet>,
+    _packet_fifo: VecDeque<Packet>,
 }
 struct RelayCodingNone {
-    packet_fifo: VecDeque<Packet>,
+    _packet_fifo: VecDeque<Packet>,
 }
 
 impl CodingStrategy for NodeCodingNone {}

@@ -26,14 +26,14 @@ pub enum PacketError {
 #[derive(Debug)]
 pub enum PacketReceiver {
     Single(NodeID),
-    Multi
+    Multi,
 }
 
 #[derive(Debug)]
 pub enum CodingHeader {
     Native(CodingInfo),
     Encoded(Vec<CodingInfo>),
-    ReportOnly
+    ReportOnly,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
@@ -63,7 +63,9 @@ pub struct Packet {
 }
 
 impl Packet {
-    pub fn sender(&self) -> NodeID { self.sender }
+    pub fn sender(&self) -> NodeID {
+        self.sender
+    }
     pub fn receiver(&self) -> PacketReceiver {
         if self.coding_header.len() == 1 {
             let receiver = self.coding_header.first().unwrap().nexthop;
@@ -72,9 +74,15 @@ impl Packet {
             PacketReceiver::Multi
         }
     }
-    pub fn id(&self) -> PacketID { self.id }
-    pub fn data(&self) -> &PacketData { &self.data }
-    pub fn coding_header(&self) -> &Vec<CodingInfo> { &self.coding_header }
+    pub fn id(&self) -> PacketID {
+        self.id
+    }
+    pub fn data(&self) -> &PacketData {
+        &self.data
+    }
+    pub fn coding_header(&self) -> &Vec<CodingInfo> {
+        &self.coding_header
+    }
 
     // FIXME: This is just a hack, we always need `some` NodeID to act as the receiver,
     // because the ESPChannel needs to internally translate the receiver to a single MAC address.
@@ -112,8 +120,8 @@ pub struct PacketBuilder {
 
 #[derive(Debug)]
 pub struct Error {
-    message: String,
-    kind: ErrorKind,
+    _message: String,
+    _kind: ErrorKind,
 }
 
 #[derive(Debug)]
@@ -162,11 +170,12 @@ impl PacketBuilder {
         self
     }
 
-
     pub fn single_coding_header(mut self, source: NodeID, nexthop: NodeID) -> Self {
         self.coding_header = vec![CodingInfo {
-            source, nexthop, id: self.id
-            }];
+            source,
+            nexthop,
+            id: self.id,
+        }];
         self
     }
 
