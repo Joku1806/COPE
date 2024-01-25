@@ -318,11 +318,10 @@ impl Channel for EspChannel {
                 // NOTE: We wait here until the TX callback ran and reset this flag. This is
                 // recommended practice in the esp-idf espnow guide. Apparently transmissions
                 // can fail if you send too quickly.
-                // TODO: Can we deadlock here?
                 while !*self.tx_callback_done.lock().unwrap() {}
 
                 if result.is_err() {
-                    // Should we return an error here? We have not sent the other frames yet.
+                    // TODO: Should we return an error here? We have not sent the other frames yet.
                     return Err(Box::new(EspChannelError::EspNowTransmissionError(
                         result.err().unwrap(),
                     )));

@@ -158,6 +158,10 @@ impl FrameCollection {
         self
     }
 
+    // FIXME: We still need to support out-of-order frame adding.
+    // For example, if there is some error when receiving the first frame, all other
+    // frames can not be received. This happens, because at that point the frame
+    // count is still unset.
     pub fn add_frame(&mut self, frame: Frame) -> Result<(), FrameCollectionError> {
         let index = frame.index as usize;
 

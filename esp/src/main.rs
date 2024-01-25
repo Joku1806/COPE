@@ -33,6 +33,8 @@ fn main() -> anyhow::Result<()> {
     let mut esp_channel = EspChannel::new(peripherals.modem)?;
     esp_channel.initialize()?;
 
+    // TODO: Investigate, why we apparently don't reset the watchdog sometimes. To
+    // mask this issue, I just set it to not panic for now.
     let watchdog_config = TWDTConfig {
         duration: Duration::from_secs(30),
         panic_on_trigger: false,
