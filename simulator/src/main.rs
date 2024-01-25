@@ -3,11 +3,16 @@ use std::sync::mpsc::channel;
 
 use cope::config::CONFIG;
 use cope::Node;
+use simple_logger::SimpleLogger;
 use simulator_channel::SimulatorChannel;
 
 mod simulator_channel;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
+    SimpleLogger::new()
+        .with_level(log::LevelFilter::Warn)
+        .init()?;
+
     let (tx, rx) = channel();
     let mut node_channels = HashMap::new();
 

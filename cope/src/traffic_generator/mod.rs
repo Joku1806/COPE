@@ -1,7 +1,5 @@
 use cope_config::types::node_id::NodeID;
 
-use crate::packet::{PacketID, CodingInfo};
-
 use super::packet::PacketBuilder;
 
 pub mod greedy_strategy;
@@ -24,14 +22,14 @@ impl TrafficGenerator {
     pub fn new(
         strategy: Box<dyn TGStrategy + Send>,
         tx_whitelist: Vec<NodeID>,
-        sender_id: NodeID
+        sender_id: NodeID,
     ) -> Self {
         assert_ne!(tx_whitelist.len(), 0, "tx_whitelist.len() should not be 0");
         TrafficGenerator {
             strategy,
             tx_whitelist,
             current_tx_id: 0,
-            sender_id
+            sender_id,
         }
     }
 
@@ -44,7 +42,6 @@ impl TrafficGenerator {
         };
         self.tx_whitelist[self.current_tx_id]
     }
-
 
     pub fn generate(&mut self) -> Option<PacketBuilder> {
         self.strategy.generate().map(|builder| {

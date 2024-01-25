@@ -1,11 +1,7 @@
 use crate::packet::Packet;
-
-pub enum ChannelError {
-    ReachedMaxBackoffs,
-    NoACK,
-}
+use std::error::Error;
 
 pub trait Channel {
-    fn transmit(&self, packet: &Packet) -> Result<(), ChannelError>;
+    fn transmit(&self, packet: &Packet) -> Result<(), Box<dyn Error>>;
     fn receive(&mut self) -> Option<Packet>;
 }
