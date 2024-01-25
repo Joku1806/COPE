@@ -1,12 +1,16 @@
-use cope_config::types::node_id::NodeID;
-use crate::Packet;
 use crate::config::CONFIG;
+use crate::Packet;
+use cope_config::types::node_id::NodeID;
 
-use std::fs;
-use std::io::Write;
+pub trait StatsLogger {
+    fn new(path: &str) -> Result<Self, std::io::Error>
+    where
+        Self: Sized;
+    fn log(&mut self, data: &str);
+}
 
 pub struct Stats {
-    file: fs::File,
+    logger: Box<dyn StatsLogger + Send>,
     bench_duration: std::time::Duration,
     time_stamp: std::time::Instant,
     packages_send_to: Vec<(NodeID, u32)>,
@@ -21,25 +25,12 @@ pub struct Stats {
     total_data_rec: u32,
 }
 
-// NOTE: For the ESP we can just print to std out
-// NOTE: We should probably
-
-// Were do I put this function
-fn folder_exists(folder_path: &str) -> bool {
-    if let Ok(metadata) = fs::metadata(folder_path) {
-        return metadata.is_dir();
-    }
-    false
-}
-
 impl Stats {
-    pub fn new(node_id: NodeID, duration: std::time::Duration) -> std::io::Result<Self> {
-        if !folder_exists("log") {
-            fs::create_dir("log")?;
-        }
-        let path = format!("./log/log_{}.csv", node_id.unwrap());
-        let file = fs::File::create(path)?;
-
+    pub fn new(
+        node_id: NodeID,
+        duration: std::time::Duration,
+        logger: Box<dyn StatsLogger + Send>,
+    ) -> Self {
         let send_to: Vec<(NodeID, u32)> = CONFIG
             .get_rx_whitelist_for(node_id)
             .expect("Config should contain rx whitelist")
@@ -55,7 +46,7 @@ impl Stats {
             .collect();
 
         let mut stats = Self {
-            file,
+            logger,
             bench_duration: duration,
             time_stamp: std::time::Instant::now(),
             packages_send_to: send_to,
@@ -67,49 +58,62 @@ impl Stats {
             report_rec: 0,
             overhearded: 0,
             total_data_send: 0,
-            total_data_rec: 0
+            total_data_rec: 0,
         };
 
-        stats.write_file_header()?;
+        let header = stats.file_header();
+        stats.logger.log(&header);
 
-        Ok(stats)
+        stats
     }
 
     pub fn record(&mut self) {
-        let  time_elapsed = self.time_stamp.elapsed();
+        let time_elapsed = self.time_stamp.elapsed();
         if time_elapsed > self.bench_duration {
-            self.write_to_file().unwrap();
+            self.log_data();
             self.reset();
             self.time_stamp = std::time::Instant::now();
         }
     }
 
-    fn write_file_header(&mut self) -> std::io::Result<()>{
-        write!(self.file, "time,")?;
+    fn file_header(&self) -> String {
+        let mut header = "".to_owned();
+
+        header.push_str("time,");
+
         for (id, _) in &self.packages_send_to {
-            write!(self.file, "send_to_{},", id.unwrap())?;
+            header.push_str(format!("send_to_{},", id.unwrap()).as_str());
         }
         for (id, _) in &self.packages_rec_from {
-            write!(self.file, "rec_from_{},", id.unwrap())?;
+            header.push_str(format!("rec_from_{},", id.unwrap()).as_str());
         }
 
-        write!(self.file, "packets_send,packets_rec,")?;
-        writeln!(self.file, "total_data_send,total_data_rec")?;
-        Ok(())
+        header.push_str("packets_send,packets_rec,total_data_send,total_data_rec");
+
+        header
     }
 
-    pub fn write_to_file(&mut self) -> std::io::Result<()> {
-        write!(self.file, "{},", self.time_stamp.elapsed().as_secs())?;
+    pub fn log_data(&mut self) {
+        let mut formatted = "".to_owned();
+
+        formatted.push_str(format!("{},", self.time_stamp.elapsed().as_secs()).as_str());
+
         for (_, val) in &self.packages_send_to {
-            write!(self.file, "{},", val)?;
+            formatted.push_str(format!("{},", val).as_str());
         }
         for (_, val) in &self.packages_rec_from {
-            write!(self.file, "{},", val)?;
+            formatted.push_str(format!("{},", val).as_str());
         }
 
-        write!(self.file, "{},{},", self.packets_send, self.packets_rec)?;
-        writeln!(self.file, "{},{}", self.total_data_send, self.total_data_rec)?;
-        Ok(())
+        formatted.push_str(
+            format!(
+                "{},{},{},{}",
+                self.packets_send, self.packets_rec, self.total_data_send, self.total_data_rec
+            )
+            .as_str(),
+        );
+
+        self.logger.log(&formatted);
     }
 
     pub fn reset(&mut self) {
@@ -126,12 +130,12 @@ impl Stats {
         self.total_data_rec = 0;
     }
 
-    pub fn add_send(&mut self, packet: &Packet){
+    pub fn add_send(&mut self, packet: &Packet) {
         self.packets_send += 1;
         self.total_data_send += packet.data().size() as u32;
     }
 
-    pub fn add_rec(&mut self, packet: &Packet){
+    pub fn add_rec(&mut self, packet: &Packet) {
         self.packets_rec += 1;
         self.total_data_rec += packet.data().size() as u32;
         let header_len = packet.coding_header().len();
@@ -142,12 +146,11 @@ impl Stats {
         }
     }
 
-    pub fn add_decoded(&mut self){
+    pub fn add_decoded(&mut self) {
         self.decoded_rec += 1;
     }
 
-    pub fn add_overheard(&mut self){
+    pub fn add_overheard(&mut self) {
         self.overhearded += 1;
     }
 }
-

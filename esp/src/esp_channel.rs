@@ -5,6 +5,7 @@ use crate::wifi_frame::WifiFrame;
 use cope::channel::Channel;
 use cope::config::CONFIG;
 use cope::packet::Packet;
+use cope::stats::{Stats, StatsLogger};
 use cope_config::types::{mac_address::MacAddress, node_id::NodeID};
 use esp_idf_svc::sys::EspError;
 use esp_idf_svc::{
@@ -87,6 +88,22 @@ impl std::fmt::Display for EspChannelError {
 
 impl Error for EspChannelError {}
 
+struct EspStatsLogger {
+    path: String,
+}
+
+impl StatsLogger for EspStatsLogger {
+    fn new(path: &str) -> Result<Self, std::io::Error> {
+        Ok(Self {
+            path: path.to_owned(),
+        })
+    }
+
+    fn log(&mut self, data: &str) {
+        println!("STATS {} {}", self.path, data);
+    }
+}
+
 pub struct EspChannel {
     // NOTE: We do not access the WiFi Driver after initialize(), but we need to keep it around so
     // it doesn't deinit when dropped.
@@ -97,6 +114,7 @@ pub struct EspChannel {
     rx_buffer: Arc<Mutex<HashMap<u32, (SystemTime, FrameCollection)>>>,
     tx_callback_done: Arc<Mutex<bool>>,
     tx_callback_result: Arc<Mutex<Result<(), EspChannelError>>>,
+    stats: Stats,
 }
 
 impl EspChannel {
@@ -107,6 +125,11 @@ impl EspChannel {
         wifi_driver.start()?;
         let espnow_driver = EspNow::take()?;
         let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta)?);
+        let id = CONFIG
+            .get_node_id_for(mac)
+            .expect("Config should contain Node MAC addresses");
+        let logger =
+            EspStatsLogger::new(format!("./log/esp/log_{}", id.unwrap()).as_str()).unwrap();
 
         Ok(EspChannel {
             wifi_driver,
@@ -116,6 +139,7 @@ impl EspChannel {
             rx_buffer: Arc::new(Mutex::new(HashMap::new())),
             tx_callback_done: Arc::new(Mutex::new(false)),
             tx_callback_result: Arc::new(Mutex::new(Ok(()))),
+            stats: Stats::new(id, Duration::from_secs(30), Box::new(logger)),
         })
     }
 
@@ -268,7 +292,7 @@ impl EspChannel {
 }
 
 impl Channel for EspChannel {
-    fn transmit(&self, packet: &Packet) -> Result<(), Box<dyn Error>> {
+    fn transmit(&mut self, packet: &Packet) -> Result<(), Box<dyn Error>> {
         let receiver = match packet.canonical_receiver() {
             None => return Err(Box::new(EspChannelError::UnknownReceiver)),
             Some(r) => r,
@@ -347,6 +371,7 @@ impl Channel for EspChannel {
             }
         }
 
+        self.stats.add_send(packet);
         Ok(())
     }
 
@@ -387,6 +412,14 @@ impl Channel for EspChannel {
                 return true;
             });
 
+        if packet.is_some() {
+            self.stats.add_rec(packet.as_ref().unwrap());
+        }
+
         packet
+    }
+
+    fn log_statistics(&mut self) {
+        self.stats.record();
     }
 }

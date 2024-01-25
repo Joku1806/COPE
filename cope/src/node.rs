@@ -7,7 +7,6 @@ use super::packet_pool::{PacketPool, SimplePacketPool};
 use crate::config::CONFIG;
 use crate::kbase::{KBase, SimpleKBase};
 use crate::packet::{Packet, PacketBuilder, PacketData};
-use crate::stats::Stats;
 use crate::topology::Topology;
 use crate::traffic_generator::greedy_strategy::GreedyStrategy;
 use crate::traffic_generator::none_strategy::NoneStrategy;
@@ -29,7 +28,6 @@ pub struct Node {
     packet_pool: SimplePacketPool,
     last_fifo_flush: std::time::Instant,
     kbase: SimpleKBase,
-    stats: Stats,
     last_stat_write: std::time::Instant,
     use_coding: bool,
 }
@@ -66,11 +64,6 @@ impl Node {
 
         let generator = TrafficGenerator::new(strategy, tx_whitelist.clone(), id);
 
-        let stats = match Stats::new(id, std::time::Duration::from_secs(30)) {
-            Ok(s) => s,
-            Err(e) => panic!("Error writing log file: {}", e),
-        };
-
         Node {
             id,
             topology: Topology::new(id, CONFIG.relay, rx_whitelist),
@@ -81,7 +74,6 @@ impl Node {
             last_fifo_flush: std::time::Instant::now(),
             packet_pool: SimplePacketPool::new(MAX_PACKET_POOL_SIZE),
             kbase: SimpleKBase::new(tx_whitelist.clone(), MAX_PACKET_POOL_SIZE),
-            stats,
             last_stat_write: std::time::Instant::now(),
             use_coding: false,
         }
@@ -93,14 +85,13 @@ impl Node {
             false => self.tick_leaf_node(),
         };
 
-        self.stats.record();
+        self.channel.log_statistics();
     }
 
     fn tick_relay(&mut self) {
         // receive
         if let Some(packet) = self.channel.receive() {
             log::info!("[Relay {}]: Recieved {:?}", self.id, packet.coding_header());
-            self.stats.add_rec(&packet);
             // TODO: extract acks ment for retransmission event
             // TODO: extract reception reports
             let coding_info = packet.coding_header().first().unwrap();
@@ -172,7 +163,6 @@ impl Node {
                 log::warn!("Got error transmitting {:?}: {}", pack, e);
             } else {
                 log::info!("[Relay {}]: Forwarded package ", self.id);
-                self.stats.add_send(&pack);
             }
         } else {
             log::info!("[Relay {}]: No Packets to forward", self.id);
@@ -220,7 +210,6 @@ impl Node {
             if let Err(e) = self.channel.transmit(&packet) {
                 log::warn!("Got error transmitting {:?}: {}", packet, e);
             }
-            self.stats.add_send(&packet);
             self.packet_pool.push_packet(packet);
             log::info!(
                 "[Node {}]: Has stored {} packages.",
@@ -232,7 +221,6 @@ impl Node {
         // receive
         if let Some(packet) = self.channel.receive() {
             if self.topology.can_receive_from(packet.sender()) {
-                self.stats.add_rec(&packet);
                 log::info!("[Node {}]: Received {:?}", self.id, packet.coding_header());
                 if packet.sender() == CONFIG.relay {
                     // decode

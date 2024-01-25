@@ -21,7 +21,10 @@ fn main() -> anyhow::Result<()> {
     for id in node_ids.iter() {
         let (node_tx, node_rx) = channel();
         node_channels.insert(*id, node_tx);
-        let mut node = Node::new(*id, Box::new(SimulatorChannel::new(node_rx, tx.clone())));
+        let mut node = Node::new(
+            *id,
+            Box::new(SimulatorChannel::new(node_rx, tx.clone(), *id)),
+        );
 
         std::thread::spawn(move || loop {
             node.tick();
