@@ -84,8 +84,6 @@ impl Node {
             true => self.tick_relay(),
             false => self.tick_leaf_node(),
         };
-
-        self.channel.log_statistics();
     }
 
     fn tick_relay(&mut self) {

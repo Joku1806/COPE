@@ -1,6 +1,7 @@
 use crate::config::CONFIG;
 use crate::Packet;
 use cope_config::types::node_id::NodeID;
+use std::num::Wrapping;
 
 pub trait StatsLogger {
     fn new(path: &str) -> Result<Self, std::io::Error>
@@ -11,54 +12,49 @@ pub trait StatsLogger {
 
 pub struct Stats {
     logger: Box<dyn StatsLogger + Send>,
-    bench_duration: std::time::Duration,
-    time_stamp: std::time::Instant,
-    packages_send_to: Vec<(NodeID, u32)>,
-    packages_rec_from: Vec<(NodeID, u32)>,
-    packets_send: u32,
-    packets_rec: u32,
-    coded_rec: u32,
-    decoded_rec: u32,
-    report_rec: u32,
-    overhearded: u32,
-    total_data_send: u32,
-    total_data_rec: u32,
+    creation_time: std::time::Instant,
+    packets_sent_to: Vec<(NodeID, Wrapping<u32>)>,
+    packets_received_from: Vec<(NodeID, Wrapping<u32>)>,
+    packets_sent: Wrapping<u32>,
+    packets_received: Wrapping<u32>,
+    coded_received: Wrapping<u32>,
+    decoded_received: Wrapping<u32>,
+    report_received: Wrapping<u32>,
+    overheard: Wrapping<u32>,
+    total_data_sent: Wrapping<u32>,
+    total_data_received: Wrapping<u32>,
 }
 
 impl Stats {
-    pub fn new(
-        node_id: NodeID,
-        duration: std::time::Duration,
-        logger: Box<dyn StatsLogger + Send>,
-    ) -> Self {
-        let send_to: Vec<(NodeID, u32)> = CONFIG
+    pub fn new(node_id: NodeID, logger: Box<dyn StatsLogger + Send>) -> Self {
+        let sent_to: Vec<(NodeID, Wrapping<u32>)> = CONFIG
             .get_rx_whitelist_for(node_id)
             .expect("Config should contain rx whitelist")
             .iter()
-            .map(|id| (*id, 0u32))
+            .map(|id| (*id, Wrapping(0u32)))
             .collect();
 
-        let rec_from: Vec<(NodeID, u32)> = CONFIG
+        let received_from: Vec<(NodeID, Wrapping<u32>)> = CONFIG
             .get_tx_whitelist_for(node_id)
             .expect("Config should contain tx whitelist")
             .iter()
-            .map(|id| (*id, 0u32))
+            .map(|id| (*id, Wrapping(0u32)))
             .collect();
 
         let mut stats = Self {
             logger,
-            bench_duration: duration,
-            time_stamp: std::time::Instant::now(),
-            packages_send_to: send_to,
-            packages_rec_from: rec_from,
-            packets_send: 0,
-            packets_rec: 0,
-            coded_rec: 0,
-            decoded_rec: 0,
-            report_rec: 0,
-            overhearded: 0,
-            total_data_send: 0,
-            total_data_rec: 0,
+            // TODO: Use Instant or SystemTime?
+            creation_time: std::time::Instant::now(),
+            packets_sent_to: sent_to,
+            packets_received_from: received_from,
+            packets_sent: Wrapping(0),
+            packets_received: Wrapping(0),
+            coded_received: Wrapping(0),
+            decoded_received: Wrapping(0),
+            report_received: Wrapping(0),
+            overheard: Wrapping(0),
+            total_data_sent: Wrapping(0),
+            total_data_received: Wrapping(0),
         };
 
         let header = stats.file_header();
@@ -67,28 +63,19 @@ impl Stats {
         stats
     }
 
-    pub fn record(&mut self) {
-        let time_elapsed = self.time_stamp.elapsed();
-        if time_elapsed > self.bench_duration {
-            self.log_data();
-            self.reset();
-            self.time_stamp = std::time::Instant::now();
-        }
-    }
-
     fn file_header(&self) -> String {
         let mut header = "".to_owned();
 
-        header.push_str("time,");
+        header.push_str("time_us,");
 
-        for (id, _) in &self.packages_send_to {
-            header.push_str(format!("send_to_{},", id.unwrap()).as_str());
+        for (id, _) in &self.packets_sent_to {
+            header.push_str(format!("sent_to_{},", id.unwrap()).as_str());
         }
-        for (id, _) in &self.packages_rec_from {
-            header.push_str(format!("rec_from_{},", id.unwrap()).as_str());
+        for (id, _) in &self.packets_received_from {
+            header.push_str(format!("received_from_{},", id.unwrap()).as_str());
         }
 
-        header.push_str("packets_send,packets_rec,total_data_send,total_data_rec");
+        header.push_str("packets_sent,packets_received,total_data_sent,total_data_received");
 
         header
     }
@@ -96,19 +83,22 @@ impl Stats {
     pub fn log_data(&mut self) {
         let mut formatted = "".to_owned();
 
-        formatted.push_str(format!("{},", self.time_stamp.elapsed().as_secs()).as_str());
+        formatted.push_str(format!("{},", self.creation_time.elapsed().as_micros()).as_str());
 
-        for (_, val) in &self.packages_send_to {
+        for (_, val) in &self.packets_sent_to {
             formatted.push_str(format!("{},", val).as_str());
         }
-        for (_, val) in &self.packages_rec_from {
+        for (_, val) in &self.packets_received_from {
             formatted.push_str(format!("{},", val).as_str());
         }
 
         formatted.push_str(
             format!(
                 "{},{},{},{}",
-                self.packets_send, self.packets_rec, self.total_data_send, self.total_data_rec
+                self.packets_sent,
+                self.packets_received,
+                self.total_data_sent,
+                self.total_data_received
             )
             .as_str(),
         );
@@ -116,41 +106,32 @@ impl Stats {
         self.logger.log(&formatted);
     }
 
-    pub fn reset(&mut self) {
-        self.time_stamp = std::time::Instant::now();
-        for (_, val) in &mut self.packages_send_to {
-            *val = 0;
-        }
-        for (_, val) in &mut self.packages_rec_from {
-            *val = 0;
-        }
-        self.packets_rec = 0;
-        self.packets_send = 0;
-        self.total_data_send = 0;
-        self.total_data_rec = 0;
+    pub fn add_sent(&mut self, packet: &Packet) {
+        self.packets_sent += 1;
+        self.total_data_sent += packet.data().size() as u32;
     }
 
-    pub fn add_send(&mut self, packet: &Packet) {
-        self.packets_send += 1;
-        self.total_data_send += packet.data().size() as u32;
-    }
-
-    pub fn add_rec(&mut self, packet: &Packet) {
-        self.packets_rec += 1;
-        self.total_data_rec += packet.data().size() as u32;
+    pub fn add_received(&mut self, packet: &Packet) {
+        self.packets_received += 1;
+        self.total_data_received += packet.data().size() as u32;
         let header_len = packet.coding_header().len();
         match header_len {
-            0 => self.report_rec += 1,
+            0 => self.report_received += 1,
             1 => (),
-            _ => self.coded_rec += 1,
+            _ => self.coded_received += 1,
         }
     }
 
+    // FIXME: How do we call this function?
+    // Channel itself does not have the information to decide
+    // whether a packet can be decoded. So we will probably
+    // have to provide a method on Channel that can be called
+    // from outside code.
     pub fn add_decoded(&mut self) {
-        self.decoded_rec += 1;
+        self.decoded_received += 1;
     }
 
     pub fn add_overheard(&mut self) {
-        self.overhearded += 1;
+        self.overheard += 1;
     }
 }

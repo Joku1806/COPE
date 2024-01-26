@@ -56,7 +56,7 @@ impl SimulatorChannel {
         SimulatorChannel {
             rx,
             tx,
-            stats: Stats::new(id, Duration::from_secs(30), Box::new(logger)),
+            stats: Stats::new(id, Box::new(logger)),
         }
     }
 }
@@ -66,7 +66,9 @@ impl Channel for SimulatorChannel {
         // FIXME: Figure out how to send without cloning
         self.tx.send(packet.clone()).unwrap();
 
-        self.stats.add_send(packet);
+        self.stats.add_sent(packet);
+        self.stats.log_data();
+
         Ok(())
     }
 
@@ -74,18 +76,11 @@ impl Channel for SimulatorChannel {
         // TODO: refactor
         match self.rx.try_recv() {
             Ok(packet) => {
-                self.stats.add_rec(&packet);
+                self.stats.add_received(&packet);
+                self.stats.log_data();
                 return Some(packet);
             }
             Err(_) => None,
         }
-    }
-
-    fn log_statistics(&mut self) {
-        // FIXME: Figure out in what format the data should be recorded.
-        // With this method, we log every 30 seconds and then reset all statistics.
-        // Maybe it would be better if we did not reset at all.
-        // Instead we could log every time a change happens.
-        self.stats.record();
     }
 }

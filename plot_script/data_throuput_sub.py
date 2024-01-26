@@ -10,8 +10,8 @@ def plot_bar_chart(csv_file, name, ax):
     # Read the CSV file into a DataFrame
     df = pd.read_csv(csv_file)
 
-    labels = ["total_data_send", "total_data_rec"]
-    values = df[labels].div(df["time"], axis=0).mean()
+    labels = ["total_data_sent", "total_data_received"]
+    values = df[labels].div(df["time_us"], axis=0).mean()
 
     # Plotting the bar chart
     ax.bar(labels, values, width=0.4, color='blue', align='center')

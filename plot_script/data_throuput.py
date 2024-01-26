@@ -7,8 +7,10 @@ def plot_bar_chart(csv_file):
     # Read the CSV file into a DataFrame
     df = pd.read_csv(csv_file)
 
-    labels = ["total_data_send", "total_data_rec"]
-    values = df[labels].div(df["time"], axis=0).mean()
+    labels = ["total_data_sent", "total_data_received"]
+    # FIXME: This is broken right now, we need to convert
+    # to some python native duration and grab seconds from that.
+    values = df[labels].div(df["time_us"], axis=0).mean()
 
     # Plotting the bar chart
     plt.rcParams.update({'font.size': 30})

@@ -139,7 +139,7 @@ impl EspChannel {
             rx_buffer: Arc::new(Mutex::new(HashMap::new())),
             tx_callback_done: Arc::new(Mutex::new(false)),
             tx_callback_result: Arc::new(Mutex::new(Ok(()))),
-            stats: Stats::new(id, Duration::from_secs(30), Box::new(logger)),
+            stats: Stats::new(id, Box::new(logger)),
         })
     }
 
@@ -371,7 +371,9 @@ impl Channel for EspChannel {
             }
         }
 
-        self.stats.add_send(packet);
+        self.stats.add_sent(packet);
+        self.stats.log_data();
+
         Ok(())
     }
 
@@ -413,13 +415,10 @@ impl Channel for EspChannel {
             });
 
         if packet.is_some() {
-            self.stats.add_rec(packet.as_ref().unwrap());
+            self.stats.add_received(packet.as_ref().unwrap());
+            self.stats.log_data();
         }
 
         packet
-    }
-
-    fn log_statistics(&mut self) {
-        self.stats.record();
     }
 }
