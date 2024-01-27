@@ -19,7 +19,7 @@ impl StatsLogger for SimulatorStatsLogger {
     where
         Self: Sized,
     {
-        let p = Path::new(path).canonicalize()?;
+        let p = Path::new(path);
 
         if let Some(dirs) = p.parent() {
             std::fs::create_dir_all(dirs)?;
