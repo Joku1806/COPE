@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from pathlib import Path
-from .plot_config import PlotConfig, PlotStyle
+from plot_config import PlotConfig, PlotStyle
 
 
 class Plotter:
@@ -50,25 +50,26 @@ class Plotter:
         plt.close()
 
     def plot_rx_throughput_over_time(self):
-        fig, ax = plt.figure()
+        fig, ax = plt.subplots()
 
         df = self.df[["time_us", "total_data_received"]]
-        df_sec = df.resample("1s", on="time_us").sum()
+        # TODO: Check if we want origin="start" or not
+        df_sec = df.resample("1s", on="time_us", origin="start").sum()
 
-        ax.plot(df_sec["time_us"], df_sec["total_data_received"])
+        ax.plot(df_sec.index, df_sec["total_data_received"])
         ax.set_xlabel("Time [s]")
         ax.set_ylabel("RX Throughput [B]")
 
         self.post_function(f"rx_throughput_over_time_{self.label}")
 
     def plot_rx_tx_barchart(self):
-        fig, ax = plt.figure()
+        fig, ax = plt.subplots()
 
         labels = ["total_data_sent", "total_data_received"]
 
         ax.bar(
             labels,
-            self.df[labels].sum(axis="columns") / self.df.iloc[-1]["time_us"].seconds,
+            self.df[labels].sum(axis="index") / self.df.iloc[-1]["time_us"].seconds,
         )
         ax.set_ylabel("Throughput [B/s]")
 

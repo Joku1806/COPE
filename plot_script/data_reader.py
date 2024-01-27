@@ -20,14 +20,14 @@ class DataReader:
         return column
 
     def subtract_previous_value(column: pd.Series) -> pd.Series:
-        return column.shift(1, fill_value=0) - column
+        return column - column.shift(1, fill_value=0)
 
     def read(self) -> pd.DataFrame:
         df = pd.read_csv(self.filepath)
-        df["time_us"] = pd.to_timedelta(df["time_us"], unit="us")
-        df = df.apply(DataReader.undo_wraparounds, axis="column")
+        df = df.apply(DataReader.undo_wraparounds, axis="index")
         df.loc[:, df.columns != "time_us"] = df.loc[:, df.columns != "time_us"].apply(
-            DataReader.subtract_previous_value, axis="column"
+            DataReader.subtract_previous_value, axis="index"
         )
+        df["time_us"] = pd.to_timedelta(df["time_us"], unit="us")
 
         return df

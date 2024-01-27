@@ -2,8 +2,8 @@ import pandas as pd
 import os
 import argparse
 
-from .data_reader import DataReader
-from .plotter import Plotter
+from data_reader import DataReader
+from plotter import Plotter
 
 
 def strip_name(name):
