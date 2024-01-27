@@ -23,3 +23,7 @@ To run the simulator, enter the `simulator` directory and run `cargo run`. Likew
 The lab machines do not have the `libuv-dev` dependency available that is needed to build espflash. Instead of the espflash install command given in the esp-rs book, run `Meta/install_lab_dependencies.sh` while inside the `esp` directory, which installs a prebuilt version of espflash to `~/.local/bin`.
 
 The newest version of espflash that works on the lab machines is v1.7.0. Because of this, you will need to set the `runner` variable in `.cargo/config.toml` to `espflash --monitor` instead of the current command for `2.x.x` espflash.
+
+## Debugging
+
+For a better debugging experience, install the "time-travelling" debugger [rr](https://rr-project.org/). Inside the `simulator` subdirectory, there is a custom `.gdbinit` file, which is needed for `rr` to print rust variables. To be able to load this file, you need to add the line `set auto-load safe-path .` to your global `~/.gdbinit` file. After that, you can record a simulator run using `rr record target/debug/simulator` and replay it using `rr replay`.
