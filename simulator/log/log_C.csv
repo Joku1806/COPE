@@ -1,4 +1,0 @@
-time,send_to_B,rec_from_A,packets_send,packets_rec,total_data_send,total_data_rec
-30,0,0,1877,3757,150003,299960
-30,0,0,1888,3765,150022,300041
-30,0,0,1884,3748,149993,299989
