@@ -2,10 +2,10 @@ use cope_config::types::node_id::NodeID;
 
 use crate::{
     kbase::{KBase, SimpleKBase},
-    packet::{Ack, CodingInfo, PacketBuilder, PacketData},
+    packet::{Ack, CodingInfo, PacketBuilder, PacketData, packet::CodingHeader},
     packet_pool::{PacketPool, SimplePacketPool},
     topology::Topology,
-    Packet, coding,
+    Packet,
 };
 
 use super::{
@@ -49,6 +49,7 @@ impl RelayNodeCoding {
     }
 
     fn has_coding_opp(&self) -> bool {
+        // TODO: wait for coding Opportunities
         true
     }
 
@@ -79,7 +80,7 @@ impl RelayNodeCoding {
         let coded_packet = PacketBuilder::new()
             .sender(topo.id())
             .data(data)
-            .coding_header(header)
+            .encoded_header(header)
             .ack_header(std::mem::take(&mut self.acks))
             .build()
             .unwrap();
@@ -101,8 +102,9 @@ fn encode(packets: &Vec<(CodingInfo, PacketData)>) -> (Vec<CodingInfo>, PacketDa
 
 impl CodingStrategy for RelayNodeCoding {
     fn handle_rx(&mut self, packet: &Packet, topology: &Topology) -> Result<(), CodingError> {
-        let coding_info = packet.coding_header().first().unwrap();
-        // TODO: handle Acks
+        let CodingHeader::Native(coding_info) = packet.coding_header() else {
+            return Err(CodingError::DefectPacketError("Expected to receive Native Packet".into()));
+        };
         let acks = packet.ack_header();
         for ack in acks {
             for info in ack.packets() {
@@ -125,7 +127,6 @@ impl CodingStrategy for RelayNodeCoding {
     }
 
     fn handle_tx(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError> {
-        // TODO: wait for coding Opportunities
 
         if let Some(packet) = self.retrans_queue.packet_to_retrans() {
             let coded_packet = self.code_packet(packet, topology)?;

@@ -1,6 +1,6 @@
 use crate::{
     coding::decode_util::{decode, remove_from_pool},
-    packet::{Ack, CodingInfo, PacketBuilder},
+    packet::{Ack, CodingInfo, PacketBuilder, packet::CodingHeader},
     packet_pool::{PacketPool, SimplePacketPool},
     topology::Topology,
     traffic_generator::TrafficGenerator,
@@ -48,18 +48,28 @@ impl CodingStrategy for LeafNodeCoding {
         }
         log::info!("[Node{}]: Retrans Queue Size {:?}", topology.id(), self.retrans_queue.len());
 
-        // check if node is next_hop for packet
-        if !is_next_hop(topology.id(), &packet) {
-            log::info!("[Node {}]: Not a next hop of Packet.", topology.id());
-            return Ok(());
+        match packet.coding_header() {
+            CodingHeader::Native(_) => {
+                unimplemented!();
+            }
+            CodingHeader::Encoded(coding_info) => {
+                // check if node is next_hop for packet
+                if !is_next_hop(topology.id(), coding_info) {
+                    log::info!("[Node {}]: Not a next hop of Packet.", topology.id());
+                    return Ok(());
+                }
+                // decode
+                // TODO: add acks to the thing
+                let (ids, info) = ids_for_decoding(topology.id(), coding_info, &self.packet_pool)?;
+                let decoded_data = decode(&ids, packet.data(), &self.packet_pool);
+                log::info!("[Node {}]: Decoded into {:?}", topology.id(), decoded_data);
+                remove_from_pool(&mut self.packet_pool, &ids);
+                self.acks.push(info);
+            },
+            CodingHeader::Control => {
+                unimplemented!();
+            },
         }
-        // decode
-        // TODO: add acks to the thing
-        let (ids, info) = ids_for_decoding(topology.id(), packet, &self.packet_pool)?;
-        let decoded_data = decode(&ids, packet.data(), &self.packet_pool);
-        log::info!("[Node {}]: Decoded into {:?}", topology.id(), decoded_data);
-        remove_from_pool(&mut self.packet_pool, &ids);
-        self.acks.push(info);
         return Ok(());
     }
 
@@ -68,7 +78,7 @@ impl CodingStrategy for LeafNodeCoding {
             let builder = PacketBuilder::new()
                 .sender(topology.id())
                 .data(data)
-                .coding_header(vec![info]);
+                .native_header(info);
             // TODO: add reception report
 
             // add acks to header
@@ -80,9 +90,9 @@ impl CodingStrategy for LeafNodeCoding {
             let packet = builder.ack_header(vec![ack]).build().unwrap();
             self.packet_pool.push_packet(packet.clone());
 
-            let Some(info) = packet.coding_header().first() else {
+            let CodingHeader::Native(info) = packet.coding_header() else {
                 return Err(CodingError::DefectPacketError(
-                    "Packet should have coding info".into(),
+                    "Expected to retransmit Native Packet".into(),
                 ));
             };
             return Ok(Some(packet));
@@ -106,9 +116,9 @@ impl CodingStrategy for LeafNodeCoding {
             let packet = builder.ack_header(vec![ack]).build().unwrap();
             self.packet_pool.push_packet(packet.clone());
 
-            let Some(info) = packet.coding_header().first() else {
+            let CodingHeader::Native(info) = packet.coding_header() else {
                 return Err(CodingError::DefectPacketError(
-                    "Packet should have coding info".into(),
+                    "Expected to send Native Packet".into(),
                 ));
             };
 

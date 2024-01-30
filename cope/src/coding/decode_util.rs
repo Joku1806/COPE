@@ -8,9 +8,8 @@ use cope_config::types::node_id::NodeID;
 use super::CodingError;
 
 
-pub fn is_next_hop(id: NodeID, packet: &Packet) -> bool {
-    packet
-        .coding_header()
+pub fn is_next_hop(id: NodeID, infos: &[CodingInfo]) -> bool {
+    infos
         .iter()
         .find(|&x| x.nexthop == id)
         .is_some()
@@ -18,13 +17,13 @@ pub fn is_next_hop(id: NodeID, packet: &Packet) -> bool {
 
 pub fn ids_for_decoding<PP: PacketPool>(
     id: NodeID,
-    packet: &Packet,
+    infos: &[CodingInfo],
     pool: &PP,
 ) -> Result<(Vec<usize>, CodingInfo), CodingError> {
     // collect Ids to decode package
     let mut packet_indices: Vec<usize> = vec![];
     let mut packet_info: Option<CodingInfo> = None;
-    for info in packet.coding_header() {
+    for info in infos {
         if info.nexthop == id {
             packet_info = Some(info.clone());
             continue;
@@ -40,10 +39,10 @@ pub fn ids_for_decoding<PP: PacketPool>(
         packet_indices.push(index);
     }
 
-    if packet_indices.len() != packet.coding_header().len() - 1 {
+    if packet_indices.len() != infos.len() - 1 {
         return Err(CodingError::DecodeError(format!(
             "Needed {}, but found {} packets.",
-            packet.coding_header().len() - 1,
+            infos.len() - 1,
             packet_indices.len()
         )));
     }

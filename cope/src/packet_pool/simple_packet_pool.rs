@@ -1,5 +1,5 @@
 use super::{PPEntry, PacketPool};
-use crate::packet::{CodingInfo, Packet};
+use crate::packet::{CodingInfo, Packet, packet::CodingHeader};
 use cope_config::types::node_id::NodeID;
 
 // NOTE: This is the most simple way to implement a packet pool
@@ -58,10 +58,9 @@ impl PacketPool for SimplePacketPool {
         if is_at_max_size {
             self.pop_front();
         }
-        if packet.coding_header().len() != 1 {
+        let CodingHeader::Native(info) = packet.coding_header() else {
             panic!("Expected Native Packet");
-        }
-        let info = packet.coding_header().first().unwrap();
+        };
         let data = packet.data();
         self.queue.push((info.clone(), data.clone()));
     }

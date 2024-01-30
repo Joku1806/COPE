@@ -7,11 +7,6 @@ use crate::coding::relay_node_coding::RelayNodeCoding;
 use crate::coding::CodingStrategy;
 use crate::config::CONFIG;
 use crate::topology::Topology;
-use crate::traffic_generator::greedy_strategy::GreedyStrategy;
-use crate::traffic_generator::none_strategy::NoneStrategy;
-use crate::traffic_generator::periodic_strategy::PeriodicStrategy;
-use crate::traffic_generator::poisson_strategy::PoissonStrategy;
-use crate::traffic_generator::random_strategy::RandomStrategy;
 use crate::traffic_generator::{TGStrategy, TrafficGenerator};
 use crate::channel::Channel;
 
@@ -45,16 +40,9 @@ impl Node {
             .get_generator_type_for(id)
             .expect("Config should contain traffic generator type");
 
-        let strategy: Box<dyn TGStrategy + Send> = match tgt {
-            TrafficGeneratorType::None => Box::new(NoneStrategy::new()),
-            TrafficGeneratorType::Greedy => Box::new(GreedyStrategy::new()),
-            TrafficGeneratorType::Poisson(rate) => Box::new(PoissonStrategy::new(rate)),
-            TrafficGeneratorType::Random(rate) => Box::new(RandomStrategy::new(rate)),
-            TrafficGeneratorType::Periodic(duration) => Box::new(PeriodicStrategy::new(duration)),
-        };
         let neigh_segno_counter =  vec![0; rx_whitelist.len()];
         let topology = Topology::new(id, CONFIG.relay, rx_whitelist, tx_whitelist.clone());
-        let generator = TrafficGenerator::new(strategy, tx_whitelist.clone(), id);
+        let generator = TrafficGenerator::from_tg_type(tgt, tx_whitelist.clone(), id);
         let coding: Box<dyn CodingStrategy + Send> = match topology.is_relay() {
             true => Box::new(RelayNodeCoding::new(tx_whitelist.clone())),
             false => Box::new(LeafNodeCoding::new(generator)),
