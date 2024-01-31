@@ -7,12 +7,8 @@ use cope_config::types::node_id::NodeID;
 
 use super::CodingError;
 
-
 pub fn is_next_hop(id: NodeID, infos: &[CodingInfo]) -> bool {
-    infos
-        .iter()
-        .find(|&x| x.nexthop == id)
-        .is_some()
+    infos.iter().find(|&x| x.nexthop == id).is_some()
 }
 
 pub fn ids_for_decoding<PP: PacketPool>(
@@ -78,9 +74,12 @@ pub fn decode<PP: PacketPool>(
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
-    use crate::{packet::PacketBuilder, packet_pool::SimplePacketPool};
+    use crate::{
+        packet::{CodingHeader as CH, PacketBuilder},
+        packet_pool::SimplePacketPool,
+    };
 
     #[test]
     fn test_ids_for_decoding() {
@@ -88,17 +87,31 @@ mod tests {
         let mut pool_node_a = SimplePacketPool::new(8);
         let mut pool_node_c = SimplePacketPool::new(8);
 
-        assert!(ids_for_decoding(state.node_a, &state.p2, &mut pool_node_a).is_err());
-        assert!(ids_for_decoding(state.node_c, &state.p2, &mut pool_node_c).is_err());
+        let CH::Encoded(infos) = state.p2.coding_header() else {
+            panic!()
+        };
+
+        // Can not decode because packet pool does not contain packets needed
+        assert!(ids_for_decoding(state.node_a, &infos, &mut pool_node_a).is_err());
+        assert!(ids_for_decoding(state.node_c, &infos, &mut pool_node_c).is_err());
 
         pool_node_a.push_packet(state.p0.clone());
         pool_node_c.push_packet(state.p1.clone());
-        let res0 = ids_for_decoding(state.node_a, &state.p2, &mut pool_node_a);
-        let res1 = ids_for_decoding(state.node_c, &state.p2, &mut pool_node_c);
+        let res0 = ids_for_decoding(state.node_a, &infos, &mut pool_node_a);
+        let res1 = ids_for_decoding(state.node_c, &infos, &mut pool_node_c);
+
+        // Now can decode
         assert!(res0.is_ok());
         assert!(res1.is_ok());
-        assert_eq!(state.p1.coding_header()[0], res0.unwrap().1);
-        assert_eq!(state.p0.coding_header()[0], res1.unwrap().1);
+
+        let CH::Native(info0) = state.p0.coding_header() else {
+            panic!()
+        };
+        let CH::Native(info1) = state.p1.coding_header() else {
+            panic!()
+        };
+        assert_eq!(*info1, res0.unwrap().1);
+        assert_eq!(*info0, res1.unwrap().1);
     }
 
     struct TestState {
@@ -121,23 +134,37 @@ mod tests {
             let data1 = PacketData::new(vec![0, 1]);
             let data2 = PacketData::new(vec![1, 0]);
 
+            let coding_info0 = CodingInfo {
+                source: node_a,
+                id: 0,
+                nexthop: node_c,
+            };
+            let coding_info1 = CodingInfo {
+                source: node_c,
+                id: 0,
+                nexthop: node_a,
+            };
+
             let p0 = PacketBuilder::new()
                 .sender(node_a)
                 .data(data0)
-                .single_coding_header(node_a, node_c)
+                .native_header(coding_info0.clone())
+                .ack_header(vec![])
                 .build()
                 .unwrap();
             let p1 = PacketBuilder::new()
                 .sender(node_c)
                 .data(data1)
-                .single_coding_header(node_c, node_a)
+                .native_header(coding_info1.clone())
+                .ack_header(vec![])
                 .build()
                 .unwrap();
-            let coding_header = vec![p0.coding_header()[0].clone(), p1.coding_header()[0].clone()];
+            let coding_header = vec![coding_info0, coding_info1];
             let p2 = PacketBuilder::new()
                 .sender(node_b)
                 .data(data2)
-                .coding_header(coding_header)
+                .encoded_header(coding_header)
+                .ack_header(vec![])
                 .build()
                 .unwrap();
 

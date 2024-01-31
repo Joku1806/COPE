@@ -55,14 +55,6 @@ impl Packet {
     pub fn sender(&self) -> NodeID {
         self.sender
     }
-    // pub fn receiver(&self) -> PacketReceiver {
-    //     if self.coding_header.len() == 1 {
-    //         let receiver = self.coding_header.first().unwrap().nexthop;
-    //         PacketReceiver::Single(receiver)
-    //     } else {
-    //         PacketReceiver::Multi
-    //     }
-    // }
 
     pub fn data(&self) -> &PacketData {
         &self.data
