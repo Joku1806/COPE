@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use std::usize;
 
 use cope_config::types::node_id::NodeID;
@@ -7,6 +8,7 @@ use super::packet_pool::{PacketPool, SimplePacketPool};
 use crate::config::CONFIG;
 use crate::kbase::{KBase, SimpleKBase};
 use crate::packet::{Packet, PacketBuilder, PacketData};
+use crate::stats::Stats;
 use crate::topology::Topology;
 use crate::traffic_generator::greedy_strategy::GreedyStrategy;
 use crate::traffic_generator::none_strategy::NoneStrategy;
@@ -26,10 +28,9 @@ pub struct Node {
     generator: TrafficGenerator,
     tx_whitelist: Vec<NodeID>,
     packet_pool: SimplePacketPool,
-    last_fifo_flush: std::time::Instant,
     kbase: SimpleKBase,
-    last_stat_write: std::time::Instant,
     use_coding: bool,
+    stats: Arc<Mutex<Stats>>,
 }
 
 impl Node {
@@ -37,6 +38,7 @@ impl Node {
         id: NodeID,
         // NOTE: Send is required for sharing between threads in simulator
         channel: Box<dyn Channel + Send>,
+        stats: &Arc<Mutex<Stats>>,
     ) -> Self {
         let rx_whitelist = CONFIG
             .get_rx_whitelist_for(id)
@@ -71,11 +73,10 @@ impl Node {
             is_relay,
             generator,
             tx_whitelist: tx_whitelist.clone(),
-            last_fifo_flush: std::time::Instant::now(),
             packet_pool: SimplePacketPool::new(MAX_PACKET_POOL_SIZE),
             kbase: SimpleKBase::new(tx_whitelist.clone(), MAX_PACKET_POOL_SIZE),
-            last_stat_write: std::time::Instant::now(),
             use_coding: false,
+            stats: Arc::clone(stats),
         }
     }
 
@@ -226,6 +227,8 @@ impl Node {
                         log::info!("[Node {}]: Not a next hop of Packet.", self.id);
                     } else if let Some(data) = self.decode(&packet) {
                         log::info!("[Node {}]: Decoded Packet to {:?}.", self.id, data);
+                        self.stats.lock().unwrap().add_decoded();
+                        self.stats.lock().unwrap().log_data();
                     } else {
                         log::warn!("[Node {}]: Could not decode Packet.", self.id);
                     }
@@ -236,6 +239,8 @@ impl Node {
                     );
                 } else {
                     //store for coding
+                    self.stats.lock().unwrap().add_overheard();
+                    self.stats.lock().unwrap().log_data();
                 }
             }
         }

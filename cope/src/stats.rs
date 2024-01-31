@@ -75,7 +75,7 @@ impl Stats {
             header.push_str(format!("received_from_{},", id.unwrap()).as_str());
         }
 
-        header.push_str("packets_sent,packets_received,total_data_sent,total_data_received");
+        header.push_str("packets_sent,packets_received,coded_received,decoded_received,report_received,overheard,total_data_sent,total_data_received");
 
         header
     }
@@ -94,9 +94,13 @@ impl Stats {
 
         formatted.push_str(
             format!(
-                "{},{},{},{}",
+                "{},{},{},{},{},{},{},{}",
                 self.packets_sent,
                 self.packets_received,
+                self.coded_received,
+                self.decoded_received,
+                self.report_received,
+                self.overheard,
                 self.total_data_sent,
                 self.total_data_received
             )

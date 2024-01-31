@@ -1,4 +1,7 @@
+from typing import Callable
+from matplotlib.dates import num2timedelta
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 import pandas as pd
 
 from pathlib import Path
@@ -49,6 +52,11 @@ class Plotter:
 
         plt.close()
 
+    def timedelta_seconds_formatter() -> Callable:
+        return FuncFormatter(
+            lambda v, _: f"{pd.Timedelta(v, unit='ns').total_seconds():.0f}"
+        )
+
     def plot_rx_throughput_over_time(self):
         fig, ax = plt.subplots()
 
@@ -57,6 +65,9 @@ class Plotter:
         df_sec = df.resample("1s", on="time_us", origin="start").sum()
 
         ax.plot(df_sec.index, df_sec["total_data_received"])
+
+        # TODO: Need good time formatter, the default exponential formatter is *not* it
+        ax.xaxis.set_major_formatter(Plotter.timedelta_seconds_formatter())
         ax.set_xlabel("Time [s]")
         ax.set_ylabel("RX Throughput [B]")
 

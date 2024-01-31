@@ -8,10 +8,13 @@ mod promiscuous_wifi;
 mod test_runner;
 mod wifi_frame;
 
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use cope::config::CONFIG;
+use cope::stats::{Stats, StatsLogger};
 use cope::Node;
+use esp_channel::EspStatsLogger;
 use simple_logger::SimpleLogger;
 
 use enumset::enum_set;
@@ -49,7 +52,11 @@ fn main() -> anyhow::Result<()> {
     let id = CONFIG
         .get_node_id_for(mac)
         .expect("Config should contain Node MAC addresses");
-    let mut node = Node::new(id, Box::new(esp_channel));
+
+    let logger = EspStatsLogger::new(format!("./log/esp/log_{}", id.unwrap()).as_str()).unwrap();
+    let stats = Arc::new(Mutex::new(Stats::new(id, Box::new(logger))));
+    esp_channel.set_statistics(&stats);
+    let mut node = Node::new(id, Box::new(esp_channel), &stats);
 
     loop {
         node.tick();

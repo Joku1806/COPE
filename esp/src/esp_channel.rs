@@ -88,7 +88,7 @@ impl std::fmt::Display for EspChannelError {
 
 impl Error for EspChannelError {}
 
-struct EspStatsLogger {
+pub struct EspStatsLogger {
     path: String,
 }
 
@@ -114,7 +114,7 @@ pub struct EspChannel {
     rx_buffer: Arc<Mutex<HashMap<u32, (SystemTime, FrameCollection)>>>,
     tx_callback_done: Arc<Mutex<bool>>,
     tx_callback_result: Arc<Mutex<Result<(), EspChannelError>>>,
-    stats: Stats,
+    stats: Option<Arc<Mutex<Stats>>>,
 }
 
 impl EspChannel {
@@ -125,11 +125,6 @@ impl EspChannel {
         wifi_driver.start()?;
         let espnow_driver = EspNow::take()?;
         let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta)?);
-        let id = CONFIG
-            .get_node_id_for(mac)
-            .expect("Config should contain Node MAC addresses");
-        let logger =
-            EspStatsLogger::new(format!("./log/esp/log_{}", id.unwrap()).as_str()).unwrap();
 
         Ok(EspChannel {
             wifi_driver,
@@ -139,8 +134,12 @@ impl EspChannel {
             rx_buffer: Arc::new(Mutex::new(HashMap::new())),
             tx_callback_done: Arc::new(Mutex::new(false)),
             tx_callback_result: Arc::new(Mutex::new(Ok(()))),
-            stats: Stats::new(id, Box::new(logger)),
+            stats: None,
         })
+    }
+
+    pub fn set_statistics(&mut self, stats: &Arc<Mutex<Stats>>) {
+        self.stats = Some(Arc::clone(stats));
     }
 
     fn set_wifi_config_and_start(&mut self) -> Result<(), EspError> {
@@ -371,8 +370,10 @@ impl Channel for EspChannel {
             }
         }
 
-        self.stats.add_sent(packet);
-        self.stats.log_data();
+        if let Some(stats) = &self.stats {
+            stats.lock().unwrap().add_sent(packet);
+            stats.lock().unwrap().log_data();
+        }
 
         Ok(())
     }
@@ -415,8 +416,10 @@ impl Channel for EspChannel {
             });
 
         if packet.is_some() {
-            self.stats.add_received(packet.as_ref().unwrap());
-            self.stats.log_data();
+            if let Some(stats) = &self.stats {
+                stats.lock().unwrap().add_received(packet.as_ref().unwrap());
+                stats.lock().unwrap().log_data();
+            }
         }
 
         packet
