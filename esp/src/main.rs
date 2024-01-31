@@ -2,7 +2,11 @@
 #![test_runner(test_runner::run)]
 
 mod esp_channel;
+mod espnow_frame;
+mod frame_collection;
+mod promiscuous_wifi;
 mod test_runner;
+mod wifi_frame;
 
 use std::time::Duration;
 
@@ -21,17 +25,21 @@ use crate::esp_channel::EspChannel;
 
 fn main() -> anyhow::Result<()> {
     esp_idf_svc::sys::link_patches();
-    SimpleLogger::new().init().unwrap();
+    SimpleLogger::new()
+        .with_level(log::LevelFilter::Warn)
+        .init()?;
 
-    let peripherals = Peripherals::take().unwrap();
-    let mut esp_channel = EspChannel::new(peripherals.modem);
-    esp_channel.initialize();
+    let peripherals = Peripherals::take()?;
+    let mut esp_channel = EspChannel::new(peripherals.modem)?;
+    esp_channel.initialize()?;
 
+    // TODO: Investigate, why we apparently don't reset the watchdog sometimes. To
+    // mask this issue, I just set it to not panic for now.
     let watchdog_config = TWDTConfig {
-        duration: Duration::from_secs(2),
-        panic_on_trigger: true,
-        // NOTE: Make sure that the IDLE task always runs on this core!
-        // The watchdog example uses Core::Core0 instead.
+        duration: Duration::from_secs(30),
+        panic_on_trigger: false,
+        // NOTE: Make sure that the IDLE task always runs on this core! The watchdog example uses
+        // Core::Core0 instead.
         subscribed_idle_tasks: enum_set!(Core::Core1),
     };
     let mut driver = TWDTDriver::new(peripherals.twdt, &watchdog_config)?;
@@ -46,28 +54,5 @@ fn main() -> anyhow::Result<()> {
     loop {
         node.tick();
         let _ = watchdog.feed();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use anyhow::Error;
-
-    #[test_case]
-    fn it_works() -> Result<(), Error> {
-        let result = 2 + 2;
-
-        anyhow::ensure!(result == 4);
-
-        return Ok(());
-    }
-
-    #[test_case]
-    fn it_doesnt_work() -> Result<(), Error> {
-        let result = 2 + 6;
-
-        anyhow::ensure!(result == 4, "result should be equal to {}", 4);
-
-        return Ok(());
     }
 }

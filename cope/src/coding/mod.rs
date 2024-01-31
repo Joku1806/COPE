@@ -5,7 +5,7 @@ mod decode_util;
 
 use core::fmt;
 
-use crate::topology::{Topology};
+use crate::topology::Topology;
 use std::time::Duration;
 use super::Packet;
 

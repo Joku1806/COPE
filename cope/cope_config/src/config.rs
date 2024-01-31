@@ -94,21 +94,15 @@ impl<const N: usize> Config<N> {
     pub fn get_rx_whitelist_for(&self, id: NodeID) -> Option<Vec<NodeID>> {
         self.rx_whitelist
             .iter()
-            .find(|&&(node,_)| id == node)
-            .map(|(_,list)| list
-                .iter()
-                .filter_map(|opt| *opt)
-                .collect::<Vec<NodeID>>())
+            .find(|&&(node, _)| id == node)
+            .map(|(_, list)| list.iter().filter_map(|opt| *opt).collect::<Vec<NodeID>>())
     }
 
     pub fn get_tx_whitelist_for(&self, id: NodeID) -> Option<Vec<NodeID>> {
         self.tx_whitelist
             .iter()
-            .find(|&&(node,_)| id == node)
-            .map(|(_,list)| list
-                .iter()
-                .filter_map(|opt| *opt)
-                .collect::<Vec<NodeID>>())
+            .find(|&&(node, _)| id == node)
+            .map(|(_, list)| list.iter().filter_map(|opt| *opt).collect::<Vec<NodeID>>())
     }
 
     pub fn get_generator_type_for(&self, id: NodeID) -> Option<TrafficGeneratorType> {

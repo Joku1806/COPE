@@ -1,7 +1,6 @@
 
 use cope_config::types::node_id::NodeID;
 use cope_config::types::traffic_generator_type::TrafficGeneratorType;
-
 use crate::coding::leaf_node_coding::LeafNodeCoding;
 use crate::coding::relay_node_coding::RelayNodeCoding;
 use crate::coding::CodingStrategy;
@@ -16,7 +15,6 @@ pub struct Node {
     topology: Topology,
     channel: Box<dyn Channel + Send>,
     coding: Box<dyn CodingStrategy + Send>,
-    neigh_segno_counter: Vec<usize>,
 }
 
 impl Node {

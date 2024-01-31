@@ -3,5 +3,3 @@
 .vscode
 Cargo.lock
 target
-sdkconfig*
-!./sdkconfig.defaults
