@@ -7,9 +7,9 @@ use std::time::Duration;
 
 pub const CONFIG: Config<3> = Config{
     nodes: [
-        (NodeID::new('A'), MacAddress::new(52, 133, 24, 185, 27, 156)),
-        (NodeID::new('B'), MacAddress::new(52, 133, 24, 185, 26, 212)),
-        (NodeID::new('C'), MacAddress::new(52, 133, 24, 185, 27, 192)),
+        (NodeID::new('A'), MacAddress::new(52, 133, 24, 184, 56, 236)),
+        (NodeID::new('B'), MacAddress::new(0, 0, 0, 0, 0, 0)),
+        (NodeID::new('C'), MacAddress::new(0, 0, 0, 0, 0, 0)),
     ],
     relay: NodeID::new('B'),
     rx_whitelist: [

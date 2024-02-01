@@ -51,7 +51,6 @@ impl Node {
             topology,
             channel,
             coding,
-            neigh_segno_counter,
         }
     }
 
