@@ -12,6 +12,7 @@ pub struct TmpConfig {
     rx_whitelist: Vec<(NodeID, Vec<NodeID>)>,
     tx_whitelist: Vec<(NodeID, Vec<NodeID>)>,
     traffic_generators: Vec<(NodeID, TrafficGeneratorType)>,
+    pub simulator_packet_loss: f64,
 }
 
 impl TmpConfig {
@@ -21,6 +22,7 @@ impl TmpConfig {
         rx_whitelist: Vec<(NodeID, Vec<NodeID>)>,
         tx_whitelist: Vec<(NodeID, Vec<NodeID>)>,
         traffic_generators: Vec<(NodeID, TrafficGeneratorType)>,
+        simulator_packet_loss: f64,
     ) -> Self {
         Self {
             node_count: nodes.len(),
@@ -29,6 +31,7 @@ impl TmpConfig {
             rx_whitelist,
             tx_whitelist,
             traffic_generators,
+            simulator_packet_loss,
         }
     }
 
@@ -66,6 +69,7 @@ pub struct Config<const N: usize> {
     pub rx_whitelist: [(NodeID, [Option<NodeID>; N]); N],
     pub tx_whitelist: [(NodeID, [Option<NodeID>; N]); N],
     pub traffic_generators: [(NodeID, TrafficGeneratorType); N],
+    pub simulator_packet_loss: f64,
 }
 
 impl<const N: usize> CopeConfig for Config<N> {}

@@ -36,6 +36,14 @@ fn main() -> anyhow::Result<()> {
                     continue;
                 }
 
+                if CONFIG.simulator_packet_loss > 0.0 {
+                    let r = rand::random::<f64>();
+                    if r < CONFIG.simulator_packet_loss {
+                        println!("Dropping packet");
+                        continue;
+                    }
+                }
+
                 // NOTE: Because the simulator channel is implemented using a multi-producer, single-consumer queue,
                 // we have to forward the packet to each node individually.
                 node_tx.send(packet.clone()).unwrap();

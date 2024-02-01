@@ -15,6 +15,7 @@ struct TOMLConfig {
     rx_whitelist: Vec<(String, Vec<String>)>,
     tx_whitelist: Vec<(String, Vec<String>)>,
     traffic_generators: Vec<(String, String)>,
+    simulator_packet_loss: f64,
 }
 
 fn main() {
@@ -96,8 +97,8 @@ fn main() {
             )
         })
         .collect();
-
-    let config = TmpConfig::new(nodes, relay, rx_whitelist, tx_whitelist, traffic_generators);
+    let simulator_packet_loss = toml_config.simulator_packet_loss;
+    let config = TmpConfig::new(nodes, relay, rx_whitelist, tx_whitelist, traffic_generators, simulator_packet_loss);
     let dest_path = "src/config.rs";
     generate(&config, &dest_path.to_string());
 }

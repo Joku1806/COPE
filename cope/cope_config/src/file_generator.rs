@@ -2,6 +2,7 @@
 // User has to provide a instance of TmpConfig that can be written to file
 // User can specify the location of the output file
 
+use std::fmt::format;
 use crate::config::TmpConfig;
 use crate::types::mac_address::MacAddress;
 use crate::types::node_id::NodeID;
@@ -12,6 +13,7 @@ use std::io::Write;
 pub fn generate(config: &TmpConfig, path: &String) {
     let mut file = fs::File::create(path).unwrap();
     let node_count = config.nodes().len();
+    let simulator_packet_loss = config.simulator_packet_loss;
     // TODO: check for correcness of input
     // TODO: remove all the unwraps
     writeln!(
@@ -29,6 +31,7 @@ pub fn generate(config: &TmpConfig, path: &String) {
     .unwrap();
     writeln!(file, "use std::time::Duration;\n").unwrap();
     writeln!(file, "pub const CONFIG: Config<{}> = Config{{", node_count).unwrap();
+    writeln!(file, "    simulator_packet_loss: {:.3},", config.simulator_packet_loss).unwrap();
     write_nodes(&mut file, config);
     write_relay(&mut file, config);
     write_whitelist(&mut file, config, node_count, "rx_whitelist");
