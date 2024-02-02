@@ -23,7 +23,7 @@ class DataReader:
         return column - column.shift(1, fill_value=0)
 
     def read(self) -> pd.DataFrame:
-        df = pd.read_csv(self.filepath, dtype={"traffic_generator": str})
+        df = pd.read_csv(self.filepath, converters={"traffic_generator": str})
         df.loc[
             :,
             df.columns.difference(
