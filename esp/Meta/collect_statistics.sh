@@ -10,6 +10,7 @@ process_output() {
             # see the implementation of EspStatsLogger in esp_channel.rs
             filename="${parts[1]}"
             data="${parts[2]}"
+            mkdir -p "${filename%/*}"
             echo "${data}" >> "${filename}"
         else
             echo "${line}"
