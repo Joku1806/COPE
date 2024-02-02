@@ -80,7 +80,10 @@ impl Channel for SimulatorChannel {
         // TODO: refactor
         match self.rx.try_recv() {
             Ok(packet) => {
-                self.stats.lock().unwrap().add_received(&packet);
+                self.stats
+                    .lock()
+                    .unwrap()
+                    .add_received_before_decode_attempt(&packet);
                 self.stats.lock().unwrap().log_data();
                 return Some(packet);
             }

@@ -23,9 +23,31 @@ class DataReader:
         return column - column.shift(1, fill_value=0)
 
     def read(self) -> pd.DataFrame:
-        df = pd.read_csv(self.filepath)
-        df = df.apply(DataReader.undo_wraparounds, axis="index")
-        df.loc[:, df.columns != "time_us"] = df.loc[:, df.columns != "time_us"].apply(
+        df = pd.read_csv(self.filepath, dtype={"traffic_generator": str})
+        df.loc[
+            :,
+            df.columns.difference(
+                ["time_us", "node_id", "target_id", "traffic_generator"]
+            ),
+        ] = df.loc[
+            :,
+            df.columns.difference(
+                ["time_us", "node_id", "target_id", "traffic_generator"]
+            ),
+        ].apply(
+            DataReader.undo_wraparounds, axis="index"
+        )
+        df.loc[
+            :,
+            df.columns.difference(
+                ["time_us", "node_id", "target_id", "traffic_generator"]
+            ),
+        ] = df.loc[
+            :,
+            df.columns.difference(
+                ["time_us", "node_id", "target_id", "traffic_generator"]
+            ),
+        ].apply(
             DataReader.subtract_previous_value, axis="index"
         )
         df["time_us"] = pd.to_timedelta(df["time_us"], unit="us")

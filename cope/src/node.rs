@@ -226,11 +226,28 @@ impl Node {
                     if !self.is_next_hop(&packet) {
                         log::info!("[Node {}]: Not a next hop of Packet.", self.id);
                     } else if let Some(data) = self.decode(&packet) {
+                        // TODO: refactor so that decode() returns a native packet
                         log::info!("[Node {}]: Decoded Packet to {:?}.", self.id, data);
-                        self.stats.lock().unwrap().add_decoded();
+                        self.stats
+                            .lock()
+                            .unwrap()
+                            .add_received_after_decode_attempt(
+                                packet.sender(),
+                                data.size() as u32,
+                                true,
+                            );
                         self.stats.lock().unwrap().log_data();
                     } else {
                         log::warn!("[Node {}]: Could not decode Packet.", self.id);
+                        self.stats
+                            .lock()
+                            .unwrap()
+                            .add_received_after_decode_attempt(
+                                packet.sender(),
+                                packet.data().size() as u32,
+                                false,
+                            );
+                        self.stats.lock().unwrap().log_data();
                     }
                     log::info!(
                         "[Node {}]: Has stored {} packages.",
@@ -239,7 +256,10 @@ impl Node {
                     );
                 } else {
                     //store for coding
-                    self.stats.lock().unwrap().add_overheard();
+                    self.stats
+                        .lock()
+                        .unwrap()
+                        .add_received_before_decode_attempt(&packet);
                     self.stats.lock().unwrap().log_data();
                 }
             }

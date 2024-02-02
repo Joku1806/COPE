@@ -417,7 +417,10 @@ impl Channel for EspChannel {
 
         if packet.is_some() {
             if let Some(stats) = &self.stats {
-                stats.lock().unwrap().add_received(packet.as_ref().unwrap());
+                stats
+                    .lock()
+                    .unwrap()
+                    .add_received_before_decode_attempt(packet.as_ref().unwrap());
                 stats.lock().unwrap().log_data();
             }
         }

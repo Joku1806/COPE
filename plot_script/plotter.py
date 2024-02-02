@@ -3,6 +3,7 @@ from matplotlib.dates import num2timedelta
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 import pandas as pd
+import numpy as np
 
 from pathlib import Path
 from plot_config import PlotConfig, PlotStyle
@@ -57,36 +58,82 @@ class Plotter:
             lambda v, _: f"{pd.Timedelta(v, unit='ns').total_seconds():.0f}"
         )
 
+    def percent_formatter() -> Callable:
+        return FuncFormatter(lambda v, _: f"{v * 100.0:.0f}%")
+
     def plot_rx_throughput_over_time(self):
         fig, ax = plt.subplots()
 
-        df = self.df[["time_us", "total_data_received"]]
+        df = self.df[["time_us", "data_received"]]
         # TODO: Check if we want origin="start" or not
         df_sec = df.resample("1s", on="time_us", origin="start").sum()
 
-        ax.plot(df_sec.index, df_sec["total_data_received"])
+        ax.plot(df_sec.index, df_sec["data_received"])
 
-        # TODO: Need good time formatter, the default exponential formatter is *not* it
         ax.xaxis.set_major_formatter(Plotter.timedelta_seconds_formatter())
         ax.set_xlabel("Time [s]")
         ax.set_ylabel("RX Throughput [B]")
 
         self.post_function(f"rx_throughput_over_time_{self.label}")
 
+    def plot_percent_decoded_over_time(self):
+        fig, ax = plt.subplots()
+
+        df = self.df[["time_us", "coded_received", "decoded_received"]]
+        # TODO: Check if we want origin="start" or not
+        df_sec = df.resample("1s", on="time_us", origin="start").sum()
+
+        ax.plot(
+            df_sec.index,
+            (
+                df_sec["decoded_received"]
+                / (df_sec["coded_received"] + df_sec["decoded_received"])
+            ).fillna(0),
+        )
+
+        ax.xaxis.set_major_formatter(Plotter.timedelta_seconds_formatter())
+        ax.yaxis.set_major_formatter(Plotter.percent_formatter())
+        ax.set_xlabel("Time [s]")
+        ax.set_ylabel("Decoded %")
+
+        self.post_function(f"percent_decoded_over_time_{self.label}")
+
+    # FIXME: This does not work correctly at all, needs to be fixed
+    # I think we just have to combine all stored files inside the
+    # log directory and then call the plot function.
     def plot_rx_tx_barchart(self):
         fig, ax = plt.subplots()
 
-        labels = ["total_data_sent", "total_data_received"]
+        nodes = self.df["target_id"].unique()
+        throughputs = {
+            "data_sent": [],
+            "data_received": [],
+        }
+        secs = self.df.iloc[-1]["time_us"].seconds
 
-        ax.bar(
-            labels,
-            self.df[labels].sum(axis="index") / self.df.iloc[-1]["time_us"].seconds,
-        )
+        for n in nodes:
+            for l in ["data_sent", "data_received"]:
+                v = self.df[self.df["target_id"] == n][l]
+                throughputs[l].append(v.sum() / secs)
+
+        x = np.arange(len(nodes))  # the label locations
+        width = 0.25  # the width of the bars
+        multiplier = 0
+
+        for attribute, measurement in throughputs.items():
+            offset = width * multiplier
+            rects = ax.bar(x + offset, measurement, width, label=attribute)
+            ax.bar_label(rects, padding=3)
+            multiplier += 1
+
         ax.set_ylabel("Throughput [B/s]")
+        ax.set_xticks(x + width, [f"Node {n}" for n in nodes])
+        ax.legend()
 
         self.post_function(f"rx_tx_barchart_{self.label}")
 
     # TODO: Plots for:
     # Cache Efficiency (Hits vs Drops?)
     # Error Rates (TX and RX)
-    # others (read the paper again to find out what is interesting to look at)
+    # Coding vs. Non-Coding (Throughput)
+    # targeted vs. achieved troughput (for TrafficGenerators that set targeted throughput)
