@@ -14,7 +14,7 @@ mod simulator_channel;
 
 fn main() -> anyhow::Result<()> {
     SimpleLogger::new()
-        .with_level(log::LevelFilter::Warn)
+        .with_level(log::LevelFilter::Debug)
         .init()?;
 
     let (tx, rx) = channel();

@@ -1,22 +1,14 @@
 use bitvec::prelude as bv;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use std::vec::Vec;
 
 use cope_config::types::node_id::NodeID;
 
+use super::Ack;
 use super::PacketData;
 
 pub type PacketID = u16;
-
-static mut CURRENT_PACKET_ID: PacketID = 0;
-
-#[inline]
-pub fn next_packet_id() -> PacketID {
-    unsafe {
-        CURRENT_PACKET_ID = CURRENT_PACKET_ID.checked_add(1).unwrap_or(0);
-        return CURRENT_PACKET_ID;
-    }
-}
 
 #[derive(Debug)]
 pub enum PacketError {
@@ -29,11 +21,11 @@ pub enum PacketReceiver {
     Multi,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum CodingHeader {
     Native(CodingInfo),
     Encoded(Vec<CodingInfo>),
-    ReportOnly,
+    Control,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
@@ -50,15 +42,12 @@ pub struct ReceptionReport {
     preceding_ids: bv::BitVec,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Packet {
-    id: PacketID,
     sender: NodeID,
-    // NOTE: These could also be HashMaps for easy access.
-    // But I am not sure if/when this is needed,
-    // so lets stay close to the definition in the paper.
-    coding_header: Vec<CodingInfo>,
+    coding_header: CodingHeader,
     reception_header: Vec<ReceptionReport>,
+    ack_header: Vec<Ack>,
     data: PacketData,
 }
 
@@ -66,31 +55,27 @@ impl Packet {
     pub fn sender(&self) -> NodeID {
         self.sender
     }
-    pub fn receiver(&self) -> PacketReceiver {
-        if self.coding_header.len() == 1 {
-            let receiver = self.coding_header.first().unwrap().nexthop;
-            PacketReceiver::Single(receiver)
-        } else {
-            PacketReceiver::Multi
-        }
-    }
-    pub fn id(&self) -> PacketID {
-        self.id
-    }
+
     pub fn data(&self) -> &PacketData {
         &self.data
     }
-    pub fn coding_header(&self) -> &Vec<CodingInfo> {
+
+    pub fn coding_header(&self) -> &CodingHeader {
         &self.coding_header
+    }
+
+    pub fn ack_header(&self) -> &[Ack] {
+        &self.ack_header
     }
 
     // FIXME: This is just a hack, we always need `some` NodeID to act as the receiver,
     // because the ESPChannel needs to internally translate the receiver to a single MAC address.
     // Check if we should instead change receiver to what it was before!
     pub fn canonical_receiver(&self) -> Option<NodeID> {
-        match self.coding_header.len() {
-            0 => None,
-            _ => Some(self.coding_header.first().unwrap().nexthop),
+        match self.coding_header {
+            CodingHeader::Native(ref info) => Some(info.nexthop),
+            CodingHeader::Encoded(ref infos) => Some(infos.first().unwrap().nexthop),
+            CodingHeader::Control => panic!(),
         }
     }
 
@@ -110,84 +95,112 @@ impl Packet {
 
 #[derive(Default)]
 pub struct PacketBuilder {
-    id: PacketID,
-    sender: NodeID,
-    receiver: NodeID,
-    coding_header: Vec<CodingInfo>,
-    reception_header: Vec<ReceptionReport>,
-    data: PacketData,
+    sender: Option<NodeID>,
+    coding_header: Option<CodingHeader>,
+    reception_header: Option<Vec<ReceptionReport>>,
+    ack_header: Option<Vec<Ack>>,
+    data: Option<PacketData>,
 }
 
 #[derive(Debug)]
-pub struct Error {
-    _message: String,
-    _kind: ErrorKind,
-}
+pub struct PacketBuildError(&'static str);
 
-#[derive(Debug)]
-pub enum ErrorKind {}
+impl Display for PacketBuildError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[PacketBuildError]: {}", self.0)
+    }
+}
 
 impl PacketBuilder {
     pub fn new() -> Self {
         PacketBuilder {
-            id: next_packet_id(),
             ..Default::default()
         }
     }
 
-    pub fn id_from(mut self, id: PacketID) -> Self {
-        self.id = id;
-        self
-    }
-
     pub fn sender(mut self, sender_id: NodeID) -> Self {
-        self.sender = sender_id;
-        self
-    }
-
-    pub fn receiver(mut self, receiver_id: NodeID) -> Self {
-        self.receiver = receiver_id;
+        self.sender = Some(sender_id);
         self
     }
 
     pub fn data(mut self, data: PacketData) -> Self {
-        self.data = data;
+        self.data = Some(data);
         self
     }
 
     pub fn data_raw(mut self, data: Vec<u8>) -> Self {
-        self.data = PacketData::new(data);
+        self.data = Some(PacketData::new(data));
         self
     }
 
     pub fn with_data_size(mut self, data_size: usize) -> Self {
-        self.data = PacketData::new(vec![0; data_size]);
+        self.data = Some(PacketData::new(vec![0; data_size]));
         self
     }
 
-    pub fn coding_header(mut self, coding_header: Vec<CodingInfo>) -> Self {
-        self.coding_header = coding_header;
+    pub fn control_header(mut self) -> Self {
+        self.coding_header = Some(CodingHeader::Control);
         self
     }
 
-    pub fn single_coding_header(mut self, source: NodeID, nexthop: NodeID) -> Self {
-        self.coding_header = vec![CodingInfo {
-            source,
-            nexthop,
-            id: self.id,
-        }];
+    pub fn encoded_header(mut self, infos: Vec<CodingInfo>) -> Self {
+        self.coding_header = Some(CodingHeader::Encoded(infos));
         self
     }
 
-    pub fn build(self) -> Result<Packet, Error> {
-        // TODO: check if everything is set
+    pub fn native_header(mut self, info: CodingInfo) -> Self {
+        self.coding_header = Some(CodingHeader::Native(info));
+        self
+    }
+
+    pub fn ack_header(mut self, ack_header: Vec<Ack>) -> Self {
+        self.ack_header = Some(ack_header);
+        self
+    }
+
+    pub fn build(self) -> Result<Packet, PacketBuildError> {
+        // check if everything is set correctly
+        let Some(sender) = self.sender else {
+            return Err(PacketBuildError("Sender must be specified"));
+        };
+
+        let Some(coding_header) = self.coding_header else {
+            return Err(PacketBuildError("Coding Header must be specified."));
+        };
+
+        // TODO: add ReceptionReport
+        // let Some(reception_header) = self.reception_header else {
+        //     return Err(PacketBuildError("Reception Report must be specified."));
+        // };
+
+        let Some(ack_header) = self.ack_header else {
+            return Err(PacketBuildError("Ack Header must be specified."));
+        };
+
+        use CodingHeader as CH;
+        let data = match (&coding_header, self.data) {
+            (CH::Native(_), Some(data)) => data,
+            (CH::Native(_), None) => {
+                return Err(PacketBuildError("Native Packet must have Packet Data."));
+            }
+            (CH::Encoded(_), Some(data)) => data,
+            (CH::Encoded(_), None) => {
+                return Err(PacketBuildError("Encoded Packet must have Packet Data."));
+            }
+            (CH::Control, Some(_)) => {
+                return Err(PacketBuildError(
+                    "Control Packet cannot contain Packet Data.",
+                ));
+            }
+            (CH::Control, None) => PacketData::new(vec![]),
+        };
         // build
         Ok(Packet {
-            id: self.id,
-            sender: self.sender,
-            coding_header: self.coding_header,
-            reception_header: self.reception_header,
-            data: self.data,
+            sender,
+            coding_header,
+            reception_header: vec![],
+            ack_header,
+            data,
         })
     }
 }

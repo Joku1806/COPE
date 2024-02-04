@@ -1,4 +1,5 @@
 use crate::config::CONFIG;
+use crate::packet::CodingHeader;
 use crate::Packet;
 use cope_config::types::node_id::NodeID;
 use cope_config::types::traffic_generator_type::TrafficGeneratorType;
@@ -101,14 +102,13 @@ impl Stats {
 
     pub fn add_sent(&mut self, packet: &Packet) {
         self.packets_sent += 1;
-        self.data_sent += packet.data().size() as u32;
+        self.data_sent += packet.data().len() as u32;
 
-        let header_len = packet.coding_header().len();
-        match header_len {
-            0 => self.reports_sent += 1,
-            1 => self.natives_sent += 1,
-            _ => self.coded_sent += 1,
-        }
+        match packet.coding_header() {
+            CodingHeader::Native(_) => self.natives_sent += 1,
+            CodingHeader::Encoded(_) => self.coded_sent += 1,
+            CodingHeader::Control => self.reports_sent += 1,
+        };
     }
 
     // TODO: Have one single function instead of splitting weirdly between before and after decode.
@@ -116,13 +116,12 @@ impl Stats {
     pub fn add_received_before_decode_attempt(&mut self, packet: &Packet) {
         self.target_id = packet.sender();
         self.packets_received += 1;
-        self.data_received += packet.data().size() as u32;
+        self.data_received += packet.data().len() as u32;
 
-        let header_len = packet.coding_header().len();
-        match header_len {
-            0 => self.reports_received += 1,
-            1 => self.natives_received += 1,
-            _ => (),
+        match packet.coding_header() {
+            CodingHeader::Native(_) => self.natives_sent += 1,
+            CodingHeader::Encoded(_) => self.coded_received += 1,
+            CodingHeader::Control => self.reports_sent += 1,
         }
     }
 

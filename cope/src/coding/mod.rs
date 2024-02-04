@@ -1,13 +1,44 @@
+mod decode_util;
+pub mod leaf_node_coding;
+pub mod relay_node_coding;
+pub mod retrans_queue;
+
+use core::fmt;
+
 use super::Packet;
-use std::collections::VecDeque;
+use crate::{topology::Topology, stats::Stats};
+use std::{sync::{Mutex, Arc}, time::Duration};
 
-trait CodingStrategy {}
-struct NodeCodingNone {
-    _packet_fifo: VecDeque<Packet>,
-}
-struct RelayCodingNone {
-    _packet_fifo: VecDeque<Packet>,
+pub const QUEUE_SIZE: usize = 8;
+pub const RETRANS_DURATION: Duration = Duration::from_millis(800);
+
+pub trait CodingStrategy {
+    fn handle_rx(
+        &mut self,
+        packet: &Packet,
+        topology: &Topology,
+        stats: &Arc<Mutex<Stats>>,
+    ) -> Result<(), CodingError>;
+    fn handle_tx(
+        &mut self,
+        topology: &Topology,
+        stats: &Arc<Mutex<Stats>>,
+    ) -> Result<Option<Packet>, CodingError>;
 }
 
-impl CodingStrategy for NodeCodingNone {}
-impl CodingStrategy for RelayCodingNone {}
+#[derive(Debug, Clone)]
+pub enum CodingError {
+    DecodeError(String),
+    DefectPacketError(String),
+    FullRetransQueue(String),
+}
+
+impl fmt::Display for CodingError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::DecodeError(str) => write!(f, "[DecodeError]: {}", str),
+            Self::DefectPacketError(str) => write!(f, "[DefectPacketError]: {}", str),
+            Self::FullRetransQueue(str) => write!(f, "[FullRetransQueue]: {}", str),
+        }
+    }
+}

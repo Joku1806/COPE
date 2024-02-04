@@ -68,7 +68,9 @@ impl SimulatorChannel {
 impl Channel for SimulatorChannel {
     fn transmit(&mut self, packet: &Packet) -> Result<(), Box<dyn Error>> {
         // FIXME: Figure out how to send without cloning
-        self.tx.send(packet.clone()).unwrap();
+        if let Err(e) = self.tx.send(packet.clone()) {
+            println!("{}", e);
+        }
 
         self.stats.lock().unwrap().add_sent(packet);
         self.stats.lock().unwrap().log_data();
