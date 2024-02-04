@@ -1,6 +1,8 @@
 use std::sync::mpsc::channel;
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
+use std::thread::sleep;
+use std::time::Duration;
 
 use cope::config::CONFIG;
 use cope::stats::{Stats, StatsLogger};
@@ -36,31 +38,29 @@ fn main() -> anyhow::Result<()> {
 
         std::thread::spawn(move || loop {
             node.tick();
+            sleep(Duration::from_millis(100));
         });
     }
 
     loop {
-        if let Ok(packet) = rx.try_recv() {
-            let sender = packet.sender();
-            for (id, node_tx) in node_channels.iter() {
-                if *id == sender {
+        let packet = rx.recv().unwrap();
+        let sender = packet.sender();
+        for (id, node_tx) in node_channels.iter() {
+            if *id == sender {
+                continue;
+            }
+
+            if CONFIG.simulator_packet_loss > 0.0 {
+                let r = rand::random::<f64>();
+                if r < CONFIG.simulator_packet_loss {
+                    log::info!("Dropping packet from {} to {}", sender, id);
                     continue;
                 }
-
-                if CONFIG.simulator_packet_loss > 0.0 {
-                    let r = rand::random::<f64>();
-                    if r < CONFIG.simulator_packet_loss {
-                        println!("Dropping packet");
-                        continue;
-                    }
-                }
-
-                // NOTE: Because the simulator channel is implemented using a multi-producer, single-consumer queue,
-                // we have to forward the packet to each node individually.
-                if let Err(e) = node_tx.send(packet.clone()) {
-                    panic!("{}", e);
-                }
             }
+
+            // NOTE: Because the simulator channel is implemented using a multi-producer, single-consumer queue,
+            // we have to forward the packet to each node individually.
+            node_tx.send(packet.clone()).unwrap();
         }
     }
 }
