@@ -100,6 +100,7 @@ impl Stats {
     }
 
     pub fn add_sent(&mut self, packet: &Packet) {
+        self.target_id = packet.sender();
         self.packets_sent += 1;
         self.data_sent += packet.data().size() as u32;
 
