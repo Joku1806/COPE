@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 cope = { path = "../cope" }
+cope_config = { path = "../cope/cope_config" }
 log = { version = "0.4", default-features = false }
 simple_logger = { version = "4.3.0" }
 anyhow = { version = "1.0.75" }
+rand = "0.8.5"

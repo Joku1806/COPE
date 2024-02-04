@@ -1,22 +1,30 @@
-pub mod leaf_node_coding;
-pub mod retrans_queue;
-pub mod relay_node_coding;
 mod decode_util;
+pub mod leaf_node_coding;
+pub mod relay_node_coding;
+pub mod retrans_queue;
 
 use core::fmt;
 
-use crate::topology::Topology;
-use std::time::Duration;
 use super::Packet;
+use crate::{topology::Topology, stats::Stats};
+use std::{sync::{Mutex, Arc}, time::Duration};
 
 pub const QUEUE_SIZE: usize = 8;
 pub const RETRANS_DURATION: Duration = Duration::from_millis(800);
 
 pub trait CodingStrategy {
-    fn handle_rx(&mut self, packet: &Packet, topology: &Topology) -> Result<(), CodingError>;
-    fn handle_tx(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError>;
+    fn handle_rx(
+        &mut self,
+        packet: &Packet,
+        topology: &Topology,
+        stats: &Arc<Mutex<Stats>>,
+    ) -> Result<(), CodingError>;
+    fn handle_tx(
+        &mut self,
+        topology: &Topology,
+        stats: &Arc<Mutex<Stats>>,
+    ) -> Result<Option<Packet>, CodingError>;
 }
-
 
 #[derive(Debug, Clone)]
 pub enum CodingError {
@@ -24,7 +32,6 @@ pub enum CodingError {
     DefectPacketError(String),
     FullRetransQueue(String),
 }
-
 
 impl fmt::Display for CodingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -35,4 +42,3 @@ impl fmt::Display for CodingError {
         }
     }
 }
-

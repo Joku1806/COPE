@@ -6,6 +6,7 @@ use cope_config::types::traffic_generator_type::TrafficGeneratorType;
 use std::time::Duration;
 
 pub const CONFIG: Config<3> = Config{
+    simulator_packet_loss: 0.100,
     nodes: [
         (NodeID::new('A'), MacAddress::new(52, 133, 24, 185, 27, 156)),
         (NodeID::new('B'), MacAddress::new(52, 133, 24, 185, 26, 212)),

@@ -1,7 +1,6 @@
 use crate::{
     packet::{CodingInfo, PacketData},
     packet_pool::PacketPool,
-    Packet,
 };
 use cope_config::types::node_id::NodeID;
 
@@ -77,8 +76,8 @@ pub fn decode<PP: PacketPool>(
 mod test {
     use super::*;
     use crate::{
-        packet::{CodingHeader as CH, PacketBuilder},
-        packet_pool::SimplePacketPool,
+        packet::{Packet, CodingHeader as CH, PacketBuilder},
+        packet_pool::SimplePacketPool
     };
 
     #[test]

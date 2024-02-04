@@ -29,6 +29,10 @@ impl NodeID {
     pub const fn new(c: char) -> Self {
         Self(c)
     }
+
+    pub fn unwrap(&self) -> char {
+        self.0
+    }
 }
 
 impl FromStr for NodeID {

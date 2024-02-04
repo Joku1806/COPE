@@ -33,3 +33,5 @@ traffic_generators = [
         "Periodic(1s)",
     ],
 ]
+
+simulator_packet_loss = 0.1
