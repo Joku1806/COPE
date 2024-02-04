@@ -5,6 +5,7 @@ pub mod kbase;
 pub mod node;
 pub mod packet;
 pub mod packet_pool;
+pub mod stats;
 pub mod topology;
 pub mod traffic_generator;
 

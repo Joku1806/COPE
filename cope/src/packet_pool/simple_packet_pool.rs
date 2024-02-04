@@ -38,6 +38,10 @@ impl PacketPool for SimplePacketPool {
         Some(self.queue.remove(pos))
     }
 
+    fn get(&self, pos: usize) -> Option<&PPEntry> {
+        self.queue.get(pos)
+    }
+
     fn position(&mut self, info: &CodingInfo) -> Option<usize> {
         self.queue.iter().position(|x| x.0 == *info)
     }

@@ -2,7 +2,6 @@ nodes = [
     ["A", "348518b838ec"],
     ["B", "000000000000"],
     ["C", "000000000000"],
-    ["D", "000000000000"],
 ]
 
 relay = "B"
@@ -11,20 +10,18 @@ rx_whitelist = [
     ["A", ["B"]],
     ["B", ["A", "C"]],
     ["C", ["B"]],
-    ["D", ["A", "B", "C"]]
 ]
 
 tx_whitelist = [
     ["A", ["C"]],
     ["B", ["A", "C"]],
     ["C", ["A"]],
-    ["D", ["A", "C"]]
 ]
 
 traffic_generators = [
     [
         "A",
-        "Random(1)",
+        "Random(5kb)",
     ],
     [
         "B",
@@ -32,10 +29,6 @@ traffic_generators = [
     ],
     [
         "C",
-        "Random(1)",
-    ],
-    [
-        "D",
-        "None",
+        "Random(5kb)",
     ],
 ]

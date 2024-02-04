@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use std::usize;
 
 use cope_config::types::node_id::NodeID;
@@ -7,6 +8,7 @@ use super::packet_pool::{PacketPool, SimplePacketPool};
 use crate::config::CONFIG;
 use crate::kbase::{KBase, SimpleKBase};
 use crate::packet::{Packet, PacketBuilder, PacketData};
+use crate::stats::Stats;
 use crate::topology::Topology;
 use crate::traffic_generator::greedy_strategy::GreedyStrategy;
 use crate::traffic_generator::none_strategy::NoneStrategy;
@@ -26,8 +28,9 @@ pub struct Node {
     generator: TrafficGenerator,
     tx_whitelist: Vec<NodeID>,
     packet_pool: SimplePacketPool,
-    last_fifo_flush: std::time::Instant,
     kbase: SimpleKBase,
+    use_coding: bool,
+    stats: Arc<Mutex<Stats>>,
 }
 
 impl Node {
@@ -35,6 +38,7 @@ impl Node {
         id: NodeID,
         // NOTE: Send is required for sharing between threads in simulator
         channel: Box<dyn Channel + Send>,
+        stats: &Arc<Mutex<Stats>>,
     ) -> Self {
         let rx_whitelist = CONFIG
             .get_rx_whitelist_for(id)
@@ -45,7 +49,6 @@ impl Node {
         let tx_whitelist = CONFIG
             .get_tx_whitelist_for(id)
             .expect("Config should contain tx whitelist");
-        eprintln!("{:?}:{:?}", &id, &tx_whitelist);
 
         let tgt = CONFIG
             .get_generator_type_for(id)
@@ -70,9 +73,10 @@ impl Node {
             is_relay,
             generator,
             tx_whitelist: tx_whitelist.clone(),
-            last_fifo_flush: std::time::Instant::now(),
             packet_pool: SimplePacketPool::new(MAX_PACKET_POOL_SIZE),
             kbase: SimpleKBase::new(tx_whitelist.clone(), MAX_PACKET_POOL_SIZE),
+            use_coding: false,
+            stats: Arc::clone(stats),
         }
     }
 
@@ -100,14 +104,18 @@ impl Node {
                 self.packet_pool.size(),
                 self.kbase.size()
             );
+            return;
         }
 
         // NOTE: we always take some time before we flush fifo to enable coding opportunities
-        let time_elapsed = self.last_fifo_flush.elapsed();
-        if time_elapsed < std::time::Duration::from_millis(800) {
+        // let  time_elapsed = self.last_fifo_flush.elapsed();
+        // if time_elapsed < std::time::Duration::from_millis(800)
+        // // || self.packet_pool.size() >= 2
+        // { return; }
+        // self.last_fifo_flush = std::time::Instant::now();
+        if !(self.packet_pool.size() >= 2) {
             return;
         }
-        self.last_fifo_flush = std::time::Instant::now();
         log::info!("[Relay {}]: Attepts to forward packets.", self.id);
 
         // deque head of output queue
@@ -120,14 +128,16 @@ impl Node {
             log::info!("[Relay {}]: Looking for Coding Opportunities", self.id);
 
             let mut packets: Vec<(CodingInfo, PacketData)> = vec![packet];
-            for &nexthop in &self.tx_whitelist {
-                let Some(packet_i) = self.packet_pool.peek_nexthop_front(nexthop) else {
-                    continue;
-                };
+            if self.use_coding {
+                for &nexthop in &self.tx_whitelist {
+                    let Some(packet_i) = self.packet_pool.peek_nexthop_front(nexthop) else {
+                        continue;
+                    };
 
-                if self.all_nexhops_can_decode(&packets, packet_i) {
-                    let p = self.packet_pool.pop_nexthop_front(nexthop).unwrap();
-                    packets.push(p);
+                    if self.all_nexhops_can_decode(&packets, packet_i) {
+                        let p = self.packet_pool.pop_nexthop_front(nexthop).unwrap();
+                        packets.push(p);
+                    }
                 }
             }
             log::info!(
@@ -216,9 +226,28 @@ impl Node {
                     if !self.is_next_hop(&packet) {
                         log::info!("[Node {}]: Not a next hop of Packet.", self.id);
                     } else if let Some(data) = self.decode(&packet) {
+                        // TODO: refactor so that decode() returns a native packet
                         log::info!("[Node {}]: Decoded Packet to {:?}.", self.id, data);
+                        self.stats
+                            .lock()
+                            .unwrap()
+                            .add_received_after_decode_attempt(
+                                packet.sender(),
+                                data.size() as u32,
+                                true,
+                            );
+                        self.stats.lock().unwrap().log_data();
                     } else {
                         log::warn!("[Node {}]: Could not decode Packet.", self.id);
+                        self.stats
+                            .lock()
+                            .unwrap()
+                            .add_received_after_decode_attempt(
+                                packet.sender(),
+                                packet.data().size() as u32,
+                                false,
+                            );
+                        self.stats.lock().unwrap().log_data();
                     }
                     log::info!(
                         "[Node {}]: Has stored {} packages.",
@@ -227,6 +256,11 @@ impl Node {
                     );
                 } else {
                     //store for coding
+                    self.stats
+                        .lock()
+                        .unwrap()
+                        .add_received_before_decode_attempt(&packet);
+                    self.stats.lock().unwrap().log_data();
                 }
             }
         }
@@ -259,7 +293,7 @@ impl Node {
         let mut data: PacketData = packet.data().clone();
 
         for &index in &packet_indices {
-            let (_, d) = self.packet_pool.remove(index).unwrap();
+            let (_, d) = self.packet_pool.get(index).unwrap();
             data = data.xor(&d);
         }
         return Some(data);

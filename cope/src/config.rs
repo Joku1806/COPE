@@ -8,9 +8,9 @@ use std::time::Duration;
 pub const CONFIG: Config<3> = Config{
     simulator_packet_loss: 0.100,
     nodes: [
-        (NodeID::new('A'), MacAddress::new(52, 133, 24, 185, 27, 156)),
-        (NodeID::new('B'), MacAddress::new(52, 133, 24, 185, 26, 212)),
-        (NodeID::new('C'), MacAddress::new(52, 133, 24, 185, 27, 192)),
+        (NodeID::new('A'), MacAddress::new(52, 133, 24, 184, 56, 236)),
+        (NodeID::new('B'), MacAddress::new(0, 0, 0, 0, 0, 0)),
+        (NodeID::new('C'), MacAddress::new(0, 0, 0, 0, 0, 0)),
     ],
     relay: NodeID::new('B'),
     rx_whitelist: [
@@ -44,8 +44,8 @@ pub const CONFIG: Config<3> = Config{
         ]),
     ],
     traffic_generators: [
-        (NodeID::new('A'), TrafficGeneratorType::Periodic(Duration::new(1, 0))),
+        (NodeID::new('A'), TrafficGeneratorType::Random(5000)),
         (NodeID::new('B'), TrafficGeneratorType::None),
-        (NodeID::new('C'), TrafficGeneratorType::Periodic(Duration::new(1, 0))),
+        (NodeID::new('C'), TrafficGeneratorType::Random(5000)),
     ],
 };
