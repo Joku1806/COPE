@@ -113,7 +113,9 @@ class Plotter:
 
         for n in nodes:
             for l in ["data_sent", "data_received"]:
-                v = self.df[self.df["target_id"] == n][l]
+                v = self.df[
+                    (self.df["target_id"] == n) & (self.df["decoded_received"] != 0)
+                ][l]
                 throughputs[l].append(v.sum() / secs)
 
         x = np.arange(len(nodes))  # the label locations
