@@ -5,6 +5,7 @@ use crate::{
         self,
         decode_util::{decode, remove_from_pool},
     },
+    config::CONFIG,
     packet::{packet::CodingHeader, Ack, CodingInfo, PacketBuilder, PacketData},
     packet_pool::{PacketPool, SimplePacketPool},
     stats::Stats,
@@ -16,7 +17,7 @@ use crate::{
 use super::{
     decode_util::{ids_for_decoding, is_next_hop},
     retrans_queue::RetransQueue,
-    CodingError, CodingStrategy, QUEUE_SIZE, RETRANS_DURATION,
+    CodingError, CodingStrategy,
 };
 
 pub struct LeafNodeCoding {
@@ -28,10 +29,13 @@ pub struct LeafNodeCoding {
 
 impl LeafNodeCoding {
     pub fn new(generator: TrafficGenerator) -> Self {
+        let sz = CONFIG.packet_pool_size;
+        let rtt = CONFIG.round_trip_time;
+
         Self {
             generator,
-            packet_pool: SimplePacketPool::new(QUEUE_SIZE),
-            retrans_queue: RetransQueue::new(QUEUE_SIZE, RETRANS_DURATION),
+            packet_pool: SimplePacketPool::new(sz),
+            retrans_queue: RetransQueue::new(sz, rtt),
             acks: vec![],
         }
     }

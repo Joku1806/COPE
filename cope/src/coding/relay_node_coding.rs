@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use cope_config::types::node_id::NodeID;
 
 use crate::{
+    config::CONFIG,
     kbase::{KBase, SimpleKBase},
     packet::{packet::CodingHeader, Ack, CodingInfo, PacketBuilder, PacketData},
     packet_pool::{PacketPool, SimplePacketPool},
@@ -11,9 +12,7 @@ use crate::{
     Packet,
 };
 
-use super::{
-    retrans_queue::RetransQueue, CodingError, CodingStrategy, QUEUE_SIZE, RETRANS_DURATION,
-};
+use super::{retrans_queue::RetransQueue, CodingError, CodingStrategy};
 
 pub struct RelayNodeCoding {
     packet_pool: SimplePacketPool,
@@ -24,10 +23,13 @@ pub struct RelayNodeCoding {
 
 impl RelayNodeCoding {
     pub fn new(tx_list: Vec<NodeID>) -> Self {
+        let sz = CONFIG.packet_pool_size;
+        let rtt = CONFIG.round_trip_time;
+
         Self {
-            packet_pool: SimplePacketPool::new(QUEUE_SIZE),
-            kbase: SimpleKBase::new(tx_list, QUEUE_SIZE),
-            retrans_queue: RetransQueue::new(QUEUE_SIZE, RETRANS_DURATION),
+            packet_pool: SimplePacketPool::new(sz),
+            kbase: SimpleKBase::new(tx_list, sz),
+            retrans_queue: RetransQueue::new(sz, rtt),
             acks: vec![],
         }
     }
