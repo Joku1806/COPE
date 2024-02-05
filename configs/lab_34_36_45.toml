@@ -1,0 +1,37 @@
+nodes = [
+    [
+        "A",
+        "48:27:e2:3b:33:44",
+    ],
+    [
+        "B",
+        "48:27:e2:3b:31:04",
+    ],
+    [
+        "C",
+        "48:27:e2:3b:30:58",
+    ],
+]
+
+relay = "B"
+
+rx_whitelist = [["A", ["B"]], ["B", ["A", "C"]], ["C", ["B"]]]
+
+tx_whitelist = [["A", ["C"]], ["B", ["A", "C"]], ["C", ["A"]]]
+
+traffic_generators = [
+    [
+        "A",
+        "Periodic(1s)",
+    ],
+    [
+        "B",
+        "None",
+    ],
+    [
+        "C",
+        "Periodic(1s)",
+    ],
+]
+
+simulator_packet_loss = 0.1
