@@ -40,7 +40,7 @@ impl RelayNodeCoding {
         packets: &Vec<(CodingInfo, PacketData)>,
         packet: &(CodingInfo, PacketData),
     ) -> bool {
-        if !packets
+        if packets
             .iter()
             .find(|(c, _)| c.nexthop == packet.0.nexthop)
             .is_some()
