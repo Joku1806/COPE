@@ -122,7 +122,7 @@ impl Stats {
 
         match packet.coding_header() {
             CodingHeader::Native(_) => self.natives_received += 1,
-            CodingHeader::Encoded(_) => self.coded_received += 1,
+            CodingHeader::Encoded(_) => (),
             CodingHeader::Control => self.reports_received += 1,
         }
     }
