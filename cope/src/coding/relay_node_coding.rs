@@ -54,11 +54,11 @@ impl RelayNodeCoding {
         true
     }
 
-    fn set_last_packet_send(&mut self) {
-        self.last_packet_send = Instant::now();
-    }
 
     fn should_tx_control(&self) -> bool {
+        if self.acks.len() == 0 {
+            return false;
+        }
         self.last_packet_send.elapsed() > CONFIG.control_packet_duration
     }
 
@@ -120,6 +120,18 @@ impl CodingStrategy for RelayNodeCoding {
         packet: &Packet,
         topology: &Topology,
     ) -> Result<Option<PacketData>, CodingError> {
+        if let CodingHeader::Control(_) = packet.coding_header() {
+        let acks = packet.ack_header();
+            for ack in acks {
+                for info in ack.packets() {
+                    log::info!("[Relay {}]: Packet {:?} was acked.", topology.id(), info);
+                    self.retrans_queue.remove_packet(info);
+                }
+                self.acks.push(ack.clone());
+            }
+            return Ok(None);
+        }
+
         let CodingHeader::Native(coding_info) = packet.coding_header() else {
             return Err(CodingError::DefectPacketError(
                 "Expected to receive Native Packet".into(),
@@ -163,12 +175,13 @@ impl CodingStrategy for RelayNodeCoding {
 
         if !self.has_coding_opp() {
             if self.should_tx_control() {
+                let receiver = *topology.txlist().first().unwrap();
                 let result = PacketBuilder::new()
                     .sender(topology.id())
-                    .control_header()
+                    .control_header(receiver)
                     .ack_header(std::mem::take(&mut self.acks))
                     .build();
-                log::warn!("[Relay {}]: Send Control Packet", topology.id());
+                log::info!("[Relay {}]: Send Control Packet", topology.id());
                 match result {
                     Ok(control_packet) => return Ok(Some(control_packet)),
                     Err(e) => {
@@ -189,5 +202,9 @@ impl CodingStrategy for RelayNodeCoding {
         let coded_packet = self.code_packet(packet, topology)?;
 
         Ok(Some(coded_packet))
+    }
+
+    fn update_last_packet_send(&mut self) {
+        self.last_packet_send = Instant::now();
     }
 }
