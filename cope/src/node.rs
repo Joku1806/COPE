@@ -93,13 +93,20 @@ impl Node {
                 .lock()
                 .unwrap()
                 .add_received_before_decode_attempt(&packet);
+            self.stats.lock().unwrap().log_data();
 
             match self.coding.handle_rx(&packet, &self.topology) {
-                Ok(Some(data)) => self
-                    .stats
-                    .lock()
-                    .unwrap()
-                    .add_received_after_decode_attempt(packet.sender(), data.len() as u32, true),
+                Ok(Some(data)) => {
+                    self.stats
+                        .lock()
+                        .unwrap()
+                        .add_received_after_decode_attempt(
+                            packet.sender(),
+                            data.len() as u32,
+                            true,
+                        );
+                    self.stats.lock().unwrap().log_data();
+                }
                 Err(e) => {
                     log::error!("{}", e);
                     self.stats
@@ -110,6 +117,7 @@ impl Node {
                             packet.data().len() as u32,
                             false,
                         );
+                    self.stats.lock().unwrap().log_data();
                 }
                 _ => (),
             };
