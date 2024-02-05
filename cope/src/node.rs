@@ -89,11 +89,11 @@ impl Node {
             }
             log::info!("[Node {}]: Received {:?}", self.id, &packet.coding_header());
 
-            self.stats
-                .lock()
-                .unwrap()
-                .add_received_before_decode_attempt(&packet);
-            self.stats.lock().unwrap().log_data();
+            // self.stats
+            //     .lock()
+            //     .unwrap()
+            //     .add_received_before_decode_attempt(&packet);
+            // self.stats.lock().unwrap().log_data();
 
             match self.coding.handle_rx(&packet, &self.topology) {
                 Ok(Some(data)) => {

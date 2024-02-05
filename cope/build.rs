@@ -3,10 +3,12 @@ use cope_config::file_generator::generate;
 use cope_config::types::mac_address::MacAddress;
 use cope_config::types::node_id::NodeID;
 use cope_config::types::traffic_generator_type::TrafficGeneratorType;
+use parse_duration;
 use serde::Deserialize;
 use std::env;
 use std::fs;
 use std::str::FromStr;
+use std::time::Duration;
 
 #[derive(Deserialize)]
 struct TOMLConfig {
@@ -16,6 +18,9 @@ struct TOMLConfig {
     tx_whitelist: Vec<(String, Vec<String>)>,
     traffic_generators: Vec<(String, String)>,
     simulator_packet_loss: f64,
+    round_trip_time: String,
+    packet_pool_size: usize,
+    control_packet_duration: String,
 }
 
 fn main() {
@@ -98,7 +103,22 @@ fn main() {
         })
         .collect();
     let simulator_packet_loss = toml_config.simulator_packet_loss;
-    let config = TmpConfig::new(nodes, relay, rx_whitelist, tx_whitelist, traffic_generators, simulator_packet_loss);
+    let round_trip_time = parse_duration::parse(&toml_config.round_trip_time).unwrap();
+    let packet_pool_size = toml_config.packet_pool_size;
+    let control_packet_duration =
+        parse_duration::parse(&toml_config.control_packet_duration).unwrap();
+
+    let config = TmpConfig::new(
+        nodes,
+        relay,
+        rx_whitelist,
+        tx_whitelist,
+        traffic_generators,
+        simulator_packet_loss,
+        round_trip_time,
+        packet_pool_size,
+        control_packet_duration,
+    );
     let dest_path = "src/config.rs";
     generate(&config, &dest_path.to_string());
 }

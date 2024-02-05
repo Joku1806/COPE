@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::types::mac_address::MacAddress;
 use crate::types::node_id::NodeID;
 use crate::types::traffic_generator_type::TrafficGeneratorType;
@@ -13,6 +15,9 @@ pub struct TmpConfig {
     tx_whitelist: Vec<(NodeID, Vec<NodeID>)>,
     traffic_generators: Vec<(NodeID, TrafficGeneratorType)>,
     pub simulator_packet_loss: f64,
+    pub round_trip_time: Duration,
+    pub packet_pool_size: usize,
+    pub control_packet_duration: Duration,
 }
 
 impl TmpConfig {
@@ -23,6 +28,9 @@ impl TmpConfig {
         tx_whitelist: Vec<(NodeID, Vec<NodeID>)>,
         traffic_generators: Vec<(NodeID, TrafficGeneratorType)>,
         simulator_packet_loss: f64,
+        round_trip_time: Duration,
+        packet_pool_size: usize,
+        control_packet_duration: Duration,
     ) -> Self {
         Self {
             node_count: nodes.len(),
@@ -32,6 +40,9 @@ impl TmpConfig {
             tx_whitelist,
             traffic_generators,
             simulator_packet_loss,
+            round_trip_time,
+            packet_pool_size,
+            control_packet_duration,
         }
     }
 
@@ -70,6 +81,9 @@ pub struct Config<const N: usize> {
     pub tx_whitelist: [(NodeID, [Option<NodeID>; N]); N],
     pub traffic_generators: [(NodeID, TrafficGeneratorType); N],
     pub simulator_packet_loss: f64,
+    pub round_trip_time: Duration,
+    pub control_packet_duration: Duration,
+    pub packet_pool_size: usize,
 }
 
 impl<const N: usize> CopeConfig for Config<N> {}

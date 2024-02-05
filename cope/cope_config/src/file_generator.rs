@@ -2,11 +2,11 @@
 // User has to provide a instance of TmpConfig that can be written to file
 // User can specify the location of the output file
 
-use std::fmt::format;
 use crate::config::TmpConfig;
 use crate::types::mac_address::MacAddress;
 use crate::types::node_id::NodeID;
 use crate::types::traffic_generator_type::TrafficGeneratorType;
+use std::fmt::format;
 use std::fs;
 use std::io::Write;
 
@@ -31,7 +31,27 @@ pub fn generate(config: &TmpConfig, path: &String) {
     .unwrap();
     writeln!(file, "use std::time::Duration;\n").unwrap();
     writeln!(file, "pub const CONFIG: Config<{}> = Config{{", node_count).unwrap();
-    writeln!(file, "    simulator_packet_loss: {:.3},", config.simulator_packet_loss).unwrap();
+    writeln!(
+        file,
+        "    simulator_packet_loss: {:.3},",
+        config.simulator_packet_loss
+    )
+    .unwrap();
+    writeln!(
+        file,
+        "    round_trip_time: Duration::new({}, {}),",
+        config.round_trip_time.as_secs(),
+        config.round_trip_time.subsec_nanos()
+    )
+    .unwrap();
+    writeln!(
+        file,
+        "    control_packet_duration: Duration::new({}, {}),",
+        config.control_packet_duration.as_secs(),
+        config.control_packet_duration.subsec_nanos()
+    )
+    .unwrap();
+    writeln!(file, "    packet_pool_size: {},", config.packet_pool_size).unwrap();
     write_nodes(&mut file, config);
     write_relay(&mut file, config);
     write_whitelist(&mut file, config, node_count, "rx_whitelist");
