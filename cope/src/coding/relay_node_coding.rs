@@ -62,8 +62,8 @@ impl RelayNodeCoding {
     }
 
     fn has_coding_opp(&self) -> bool {
-        // TODO: wait for coding Opportunities
-        true
+        // FIXME: This can definitely be improved
+        self.packet_pool.size() >= 2
     }
 
     fn code_packet(
