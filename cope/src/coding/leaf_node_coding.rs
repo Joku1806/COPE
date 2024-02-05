@@ -86,7 +86,7 @@ impl CodingStrategy for LeafNodeCoding {
                 return Ok(Some(decoded_data));
             }
             CodingHeader::Control => {
-                unimplemented!();
+                return Ok(None);
             }
         }
 
