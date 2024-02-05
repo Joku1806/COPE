@@ -1,13 +1,13 @@
-use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use crate::{
     coding::{
         self,
         decode_util::{decode, remove_from_pool},
     },
+    config::CONFIG,
     packet::{packet::CodingHeader, Ack, CodingInfo, PacketBuilder, PacketData},
     packet_pool::{PacketPool, SimplePacketPool},
-    stats::Stats,
     topology::Topology,
     traffic_generator::TrafficGenerator,
     Packet,
@@ -16,7 +16,7 @@ use crate::{
 use super::{
     decode_util::{ids_for_decoding, is_next_hop},
     retrans_queue::RetransQueue,
-    CodingError, CodingStrategy, QUEUE_SIZE, RETRANS_DURATION,
+    CodingError, CodingStrategy,
 };
 
 pub struct LeafNodeCoding {
@@ -24,16 +24,29 @@ pub struct LeafNodeCoding {
     packet_pool: SimplePacketPool,
     retrans_queue: RetransQueue,
     acks: Vec<CodingInfo>,
+    last_packet_send: Instant,
 }
 
 impl LeafNodeCoding {
     pub fn new(generator: TrafficGenerator) -> Self {
+        let sz = CONFIG.packet_pool_size;
+        let rtt = CONFIG.round_trip_time;
+
         Self {
             generator,
-            packet_pool: SimplePacketPool::new(QUEUE_SIZE),
-            retrans_queue: RetransQueue::new(QUEUE_SIZE, RETRANS_DURATION),
+            packet_pool: SimplePacketPool::new(sz),
+            retrans_queue: RetransQueue::new(sz, rtt),
             acks: vec![],
+            last_packet_send: Instant::now(),
         }
+    }
+
+
+    fn should_tx_control(&self) -> bool {
+        if self.acks.len() == 0 {
+            return false;
+        }
+        self.last_packet_send.elapsed() > CONFIG.control_packet_duration
     }
 }
 
@@ -56,6 +69,7 @@ impl CodingStrategy for LeafNodeCoding {
                 self.retrans_queue.remove_packet(info);
             }
         }
+
         log::info!(
             "[Node{}]: Retrans Queue Size {:?}",
             topology.id(),
@@ -85,8 +99,8 @@ impl CodingStrategy for LeafNodeCoding {
                 self.acks.push(info);
                 return Ok(Some(decoded_data));
             }
-            CodingHeader::Control => {
-                unimplemented!();
+            CodingHeader::Control(_) => {
+                return Ok(None);
             }
         }
 
@@ -125,6 +139,30 @@ impl CodingStrategy for LeafNodeCoding {
             )));
         }
 
+        if self.should_tx_control() {
+            let receiver = *topology.txlist().first().unwrap();
+            let ack = Ack {
+                source: topology.id(),
+                packets: std::mem::take(&mut self.acks),
+            };
+            let result = PacketBuilder::new()
+                .sender(topology.id())
+                .control_header(receiver)
+                .ack_header(vec![ack])
+                .build();
+            log::info!("[Relay {}]: Send Control Packet", topology.id());
+            match result {
+                Ok(control_packet) => return Ok(Some(control_packet)),
+                Err(e) => {
+                    return Err(CodingError::DefectPacketError(format!(
+                        "[Relay {}]: Failed to build Control Packet, because {}",
+                        topology.id(),
+                        e
+                    )))
+                }
+            }
+        }
+
         if let Some(builder) = self.generator.generate() {
             // TODO: add reception report
 
@@ -148,5 +186,9 @@ impl CodingStrategy for LeafNodeCoding {
             return Ok(Some(packet));
         }
         Ok(None)
+    }
+
+    fn update_last_packet_send(&mut self) {
+        self.last_packet_send = Instant::now();
     }
 }

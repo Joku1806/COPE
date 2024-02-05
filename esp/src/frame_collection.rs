@@ -1,4 +1,6 @@
 use rand::prelude::*;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::{cmp::min, ops::Deref};
 
 const FIRST_FRAME_HEADER_SIZE: u8 = 7;
@@ -249,7 +251,12 @@ impl FrameCollection {
         let mut start: usize = 0;
         let mut index: u8 = 0;
         let magic: u32 = match self.magic {
-            None => rand::thread_rng().gen(),
+            None => {
+                let mut s = DefaultHasher::new();
+                bytes.hash(&mut s);
+                // NOTE: I really hope the default hash function is high quality
+                (s.finish() & 0xFFFFFFFF).try_into().unwrap()
+            }
             Some(m) => m,
         };
 

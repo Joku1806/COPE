@@ -1,34 +1,14 @@
-nodes = [
-    ["A", "348518b838ec"],
-    ["B", "000000000000"],
-    ["C", "000000000000"],
-]
+nodes = [["A", "348518b838ec"], ["B", "000000000000"], ["C", "000000000000"]]
 
 relay = "B"
 
-rx_whitelist = [
-    ["A", ["B"]],
-    ["B", ["A", "C"]],
-    ["C", ["B"]],
-]
+rx_whitelist = [["A", ["B"]], ["B", ["A", "C"]], ["C", ["B"]]]
 
-tx_whitelist = [
-    ["A", ["C"]],
-    ["B", ["A", "C"]],
-    ["C", ["A"]],
-]
+tx_whitelist = [["A", ["C"]], ["B", ["A", "C"]], ["C", ["A"]]]
 
-traffic_generators = [
-    [
-        "A",
-        "Periodic(1s)",
-    ],
-    [
-        "B",
-        "None",
-    ],
-    [
-        "C",
-        "None",
-    ],
-]
+traffic_generators = [["A", "Periodic(1s)"], ["B", "None"], ["C", "None"]]
+
+simulator_packet_loss = 0.0
+round_trip_time = "1.5s"
+packet_pool_size = 8
+control_packet_duration = "200ms"

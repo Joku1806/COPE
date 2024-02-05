@@ -1,6 +1,17 @@
-# 34:85:18:b8:38:ec
-# 34:85:18:b8:3c:04
-nodes = [["A", "348518b838ec"], ["B", "348518b83c04"], ["C", "000000000000"]]
+nodes = [
+    [
+        "A",
+        "48:27:e2:3b:33:44",
+    ],
+    [
+        "B",
+        "48:27:e2:3b:31:04",
+    ],
+    [
+        "C",
+        "48:27:e2:3b:30:58",
+    ],
+]
 
 relay = "B"
 
@@ -23,7 +34,7 @@ traffic_generators = [
     ],
 ]
 
-simulator_packet_loss = 0.0
+simulator_packet_loss = 0.1
 round_trip_time = "1.5s"
 packet_pool_size = 8
 control_packet_duration = "200ms"

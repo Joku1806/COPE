@@ -25,7 +25,7 @@ pub enum PacketReceiver {
 pub enum CodingHeader {
     Native(CodingInfo),
     Encoded(Vec<CodingInfo>),
-    Control,
+    Control(NodeID),
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
@@ -75,7 +75,7 @@ impl Packet {
         match self.coding_header {
             CodingHeader::Native(ref info) => Some(info.nexthop),
             CodingHeader::Encoded(ref infos) => Some(infos.first().unwrap().nexthop),
-            CodingHeader::Control => panic!(),
+            CodingHeader::Control(node_id) => Some(node_id),
         }
     }
 
@@ -138,8 +138,8 @@ impl PacketBuilder {
         self
     }
 
-    pub fn control_header(mut self) -> Self {
-        self.coding_header = Some(CodingHeader::Control);
+    pub fn control_header(mut self, id: NodeID) -> Self {
+        self.coding_header = Some(CodingHeader::Control(id));
         self
     }
 
@@ -187,12 +187,12 @@ impl PacketBuilder {
             (CH::Encoded(_), None) => {
                 return Err(PacketBuildError("Encoded Packet must have Packet Data."));
             }
-            (CH::Control, Some(_)) => {
+            (CH::Control(_), Some(_)) => {
                 return Err(PacketBuildError(
                     "Control Packet cannot contain Packet Data.",
                 ));
             }
-            (CH::Control, None) => PacketData::new(vec![]),
+            (CH::Control(_), None) => PacketData::new(vec![]),
         };
         // build
         Ok(Packet {

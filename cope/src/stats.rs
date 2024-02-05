@@ -109,7 +109,7 @@ impl Stats {
         match packet.coding_header() {
             CodingHeader::Native(_) => self.natives_sent += 1,
             CodingHeader::Encoded(_) => self.coded_sent += 1,
-            CodingHeader::Control => self.reports_sent += 1,
+            CodingHeader::Control(_) => self.reports_sent += 1,
         };
     }
 
@@ -118,12 +118,13 @@ impl Stats {
     pub fn add_received_before_decode_attempt(&mut self, packet: &Packet) {
         self.target_id = packet.sender();
         self.packets_received += 1;
-        self.data_received += packet.data().len() as u32;
+        // FIXME: Use different data_received fields, depending on the packet being encoded or decoded.
+        // self.data_received += packet.data().len() as u32;
 
         match packet.coding_header() {
             CodingHeader::Native(_) => self.natives_received += 1,
-            CodingHeader::Encoded(_) => self.coded_received += 1,
-            CodingHeader::Control => self.reports_received += 1,
+            CodingHeader::Encoded(_) => (),
+            CodingHeader::Control(_) => self.reports_received += 1,
         }
     }
 
