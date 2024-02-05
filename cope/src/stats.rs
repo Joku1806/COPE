@@ -101,7 +101,8 @@ impl Stats {
     }
 
     pub fn add_sent(&mut self, packet: &Packet) {
-        self.target_id = packet.sender();
+        // FIXME: What to do about encoded packets with multiple receivers?
+        self.target_id = packet.canonical_receiver().unwrap();
         self.packets_sent += 1;
         self.data_sent += packet.data().len() as u32;
 
