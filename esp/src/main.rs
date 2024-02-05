@@ -49,6 +49,8 @@ fn main() -> anyhow::Result<()> {
     let mut watchdog = driver.watch_current_task()?;
 
     let mac = esp_channel.get_mac();
+    log::info!("Read MAC address (Sta): {}", mac);
+
     let id = CONFIG
         .get_node_id_for(mac)
         .expect("Config should contain Node MAC addresses");
