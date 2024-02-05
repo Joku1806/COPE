@@ -1,4 +1,4 @@
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 
 use cope_config::types::node_id::NodeID;
 
@@ -6,8 +6,9 @@ use crate::{
     kbase::{KBase, SimpleKBase},
     packet::{packet::CodingHeader, Ack, CodingInfo, PacketBuilder, PacketData},
     packet_pool::{PacketPool, SimplePacketPool},
+    stats::Stats,
     topology::Topology,
-    Packet, stats::Stats,
+    Packet,
 };
 
 use super::{
@@ -107,13 +108,13 @@ impl CodingStrategy for RelayNodeCoding {
         &mut self,
         packet: &Packet,
         topology: &Topology,
-        stats: &Arc<Mutex<Stats>>,
-    ) -> Result<(), CodingError> {
+    ) -> Result<Option<PacketData>, CodingError> {
         let CodingHeader::Native(coding_info) = packet.coding_header() else {
             return Err(CodingError::DefectPacketError(
                 "Expected to receive Native Packet".into(),
             ));
         };
+
         let acks = packet.ack_header();
         for ack in acks {
             for info in ack.packets() {
@@ -132,14 +133,11 @@ impl CodingStrategy for RelayNodeCoding {
             self.packet_pool.size(),
             self.kbase.size()
         );
-        Ok(())
+
+        Ok(Some(packet.data().clone()))
     }
 
-    fn handle_tx(
-        &mut self,
-        topology: &Topology,
-        stats: &Arc<Mutex<Stats>>,
-    ) -> Result<Option<Packet>, CodingError> {
+    fn handle_tx(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError> {
         if let Some(packet) = self.retrans_queue.packet_to_retrans() {
             let coded_packet = self.code_packet(packet, topology)?;
             return Ok(Some(coded_packet));

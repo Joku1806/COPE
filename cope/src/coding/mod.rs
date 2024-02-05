@@ -6,8 +6,8 @@ pub mod retrans_queue;
 use core::fmt;
 
 use super::Packet;
-use crate::{topology::Topology, stats::Stats};
-use std::{sync::{Mutex, Arc}, time::Duration};
+use crate::{packet::PacketData, topology::Topology};
+use std::time::Duration;
 
 pub const QUEUE_SIZE: usize = 8;
 pub const RETRANS_DURATION: Duration = Duration::from_millis(800);
@@ -17,13 +17,8 @@ pub trait CodingStrategy {
         &mut self,
         packet: &Packet,
         topology: &Topology,
-        stats: &Arc<Mutex<Stats>>,
-    ) -> Result<(), CodingError>;
-    fn handle_tx(
-        &mut self,
-        topology: &Topology,
-        stats: &Arc<Mutex<Stats>>,
-    ) -> Result<Option<Packet>, CodingError>;
+    ) -> Result<Option<PacketData>, CodingError>;
+    fn handle_tx(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError>;
 }
 
 #[derive(Debug, Clone)]

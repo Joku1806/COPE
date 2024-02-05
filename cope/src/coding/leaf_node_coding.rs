@@ -5,7 +5,7 @@ use crate::{
         self,
         decode_util::{decode, remove_from_pool},
     },
-    packet::{packet::CodingHeader, Ack, CodingInfo, PacketBuilder},
+    packet::{packet::CodingHeader, Ack, CodingInfo, PacketBuilder, PacketData},
     packet_pool::{PacketPool, SimplePacketPool},
     stats::Stats,
     topology::Topology,
@@ -42,12 +42,11 @@ impl CodingStrategy for LeafNodeCoding {
         &mut self,
         packet: &Packet,
         topology: &Topology,
-        stats: &Arc<Mutex<Stats>>,
-    ) -> Result<(), CodingError> {
+    ) -> Result<Option<PacketData>, CodingError> {
         let is_from_relay = packet.sender() == topology.relay();
         if !is_from_relay {
             //store for coding
-            return Ok(());
+            return Ok(None);
         }
         // handle acks
         let acks = packet.ack_header();
@@ -68,65 +67,33 @@ impl CodingStrategy for LeafNodeCoding {
                 let is_next_hop = topology.id() == coding_info.nexthop;
                 if !is_next_hop {
                     // store for coding
-                    stats
-                        .lock()
-                        .unwrap()
-                        .add_received_before_decode_attempt(&packet);
-                    stats.lock().unwrap().log_data();
-                    return Ok(());
+                    return Ok(None);
                 }
-
-                stats.lock().unwrap().add_received_after_decode_attempt(
-                    packet.sender(),
-                    packet.data().len() as u32,
-                    false,
-                );
-                stats.lock().unwrap().log_data();
             }
             CodingHeader::Encoded(coding_info) => {
                 // check if node is next_hop for packet
                 if !is_next_hop(topology.id(), coding_info) {
                     log::info!("[Node {}]: Not a next hop of Packet.", topology.id());
-                    return Ok(());
+                    return Ok(None);
                 }
                 // decode
                 // TODO: add acks to the thing
-                let (ids, info) =
-                    match ids_for_decoding(topology.id(), coding_info, &self.packet_pool) {
-                        Ok(ok) => ok,
-                        Err(e) => {
-                            stats.lock().unwrap().add_received_after_decode_attempt(
-                                packet.sender(),
-                                packet.data().len() as u32,
-                                false,
-                            );
-                            stats.lock().unwrap().log_data();
-                            return Err(e);
-                        }
-                    };
+                let (ids, info) = ids_for_decoding(topology.id(), coding_info, &self.packet_pool)?;
                 let decoded_data = decode(&ids, packet.data(), &self.packet_pool);
                 log::info!("[Node {}]: Decoded into {:?}", topology.id(), decoded_data);
                 remove_from_pool(&mut self.packet_pool, &ids);
                 self.acks.push(info);
-                stats.lock().unwrap().add_received_after_decode_attempt(
-                    packet.sender(),
-                    decoded_data.len() as u32,
-                    true,
-                );
-                stats.lock().unwrap().log_data();
+                return Ok(Some(decoded_data));
             }
             CodingHeader::Control => {
                 unimplemented!();
             }
         }
-        return Ok(());
+
+        Ok(Some(packet.data().clone()))
     }
 
-    fn handle_tx(
-        &mut self,
-        topology: &Topology,
-        stats: &Arc<Mutex<Stats>>,
-    ) -> Result<Option<Packet>, CodingError> {
+    fn handle_tx(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError> {
         if let Some((info, data)) = self.retrans_queue.packet_to_retrans() {
             let builder = PacketBuilder::new()
                 .sender(topology.id())
