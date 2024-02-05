@@ -60,7 +60,9 @@ fn main() -> anyhow::Result<()> {
 
             // NOTE: Because the simulator channel is implemented using a multi-producer, single-consumer queue,
             // we have to forward the packet to each node individually.
-            node_tx.send(packet.clone()).unwrap();
+            if let Err(e) = node_tx.send(packet.clone()) {
+                panic!("{}", e);
+            }
         }
     }
 }
