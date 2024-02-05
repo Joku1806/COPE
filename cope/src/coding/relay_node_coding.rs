@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use cope_config::types::node_id::NodeID;
 
@@ -7,7 +7,6 @@ use crate::{
     kbase::{KBase, SimpleKBase},
     packet::{packet::CodingHeader, Ack, CodingInfo, PacketBuilder, PacketData},
     packet_pool::{PacketPool, SimplePacketPool},
-    stats::Stats,
     topology::Topology,
     Packet,
 };
@@ -19,6 +18,7 @@ pub struct RelayNodeCoding {
     kbase: SimpleKBase,
     retrans_queue: RetransQueue,
     acks: Vec<Ack>,
+    last_packet_send: Instant,
 }
 
 impl RelayNodeCoding {
@@ -31,6 +31,7 @@ impl RelayNodeCoding {
             kbase: SimpleKBase::new(tx_list, sz),
             retrans_queue: RetransQueue::new(sz, rtt),
             acks: vec![],
+            last_packet_send: Instant::now(),
         }
     }
 
@@ -51,6 +52,14 @@ impl RelayNodeCoding {
             }
         }
         true
+    }
+
+
+    fn should_tx_control(&self) -> bool {
+        if self.acks.len() == 0 {
+            return false;
+        }
+        self.last_packet_send.elapsed() > CONFIG.control_packet_duration
     }
 
     fn has_coding_opp(&self) -> bool {
@@ -111,6 +120,18 @@ impl CodingStrategy for RelayNodeCoding {
         packet: &Packet,
         topology: &Topology,
     ) -> Result<Option<PacketData>, CodingError> {
+        if let CodingHeader::Control(_) = packet.coding_header() {
+        let acks = packet.ack_header();
+            for ack in acks {
+                for info in ack.packets() {
+                    log::info!("[Relay {}]: Packet {:?} was acked.", topology.id(), info);
+                    self.retrans_queue.remove_packet(info);
+                }
+                self.acks.push(ack.clone());
+            }
+            return Ok(None);
+        }
+
         let CodingHeader::Native(coding_info) = packet.coding_header() else {
             return Err(CodingError::DefectPacketError(
                 "Expected to receive Native Packet".into(),
@@ -153,6 +174,25 @@ impl CodingStrategy for RelayNodeCoding {
         }
 
         if !self.has_coding_opp() {
+            if self.should_tx_control() {
+                let receiver = *topology.txlist().first().unwrap();
+                let result = PacketBuilder::new()
+                    .sender(topology.id())
+                    .control_header(receiver)
+                    .ack_header(std::mem::take(&mut self.acks))
+                    .build();
+                log::info!("[Relay {}]: Send Control Packet", topology.id());
+                match result {
+                    Ok(control_packet) => return Ok(Some(control_packet)),
+                    Err(e) => {
+                        return Err(CodingError::DefectPacketError(format!(
+                            "[Relay {}]: Failed to build Control Packet, because {}",
+                            topology.id(),
+                            e
+                        )))
+                    }
+                }
+            }
             return Ok(None);
         }
 
@@ -162,5 +202,9 @@ impl CodingStrategy for RelayNodeCoding {
         let coded_packet = self.code_packet(packet, topology)?;
 
         Ok(Some(coded_packet))
+    }
+
+    fn update_last_packet_send(&mut self) {
+        self.last_packet_send = Instant::now();
     }
 }

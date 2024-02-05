@@ -7,6 +7,7 @@ use core::fmt;
 
 use super::Packet;
 use crate::{packet::PacketData, topology::Topology};
+use std::time::Duration;
 
 pub trait CodingStrategy {
     fn handle_rx(
@@ -15,6 +16,7 @@ pub trait CodingStrategy {
         topology: &Topology,
     ) -> Result<Option<PacketData>, CodingError>;
     fn handle_tx(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError>;
+    fn update_last_packet_send(&mut self);
 }
 
 #[derive(Debug, Clone)]

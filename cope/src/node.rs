@@ -77,6 +77,7 @@ impl Node {
                 self.stats.lock().unwrap().add_sent(&packet);
                 self.stats.lock().unwrap().log_data();
             }
+            self.coding.update_last_packet_send();
             //TODO: handle error
         }
     }
