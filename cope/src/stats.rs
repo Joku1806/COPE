@@ -118,7 +118,8 @@ impl Stats {
     pub fn add_received_before_decode_attempt(&mut self, packet: &Packet) {
         self.target_id = packet.sender();
         self.packets_received += 1;
-        self.data_received += packet.data().len() as u32;
+        // FIXME: Use different data_received fields, depending on the packet being encoded or decoded.
+        // self.data_received += packet.data().len() as u32;
 
         match packet.coding_header() {
             CodingHeader::Native(_) => self.natives_received += 1,
