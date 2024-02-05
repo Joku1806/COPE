@@ -1,7 +1,7 @@
 use cope_config::types::{node_id::NodeID, traffic_generator_type::TrafficGeneratorType};
 
-use crate::packet::{CodingInfo, PacketID};
 use super::packet::PacketBuilder;
+use crate::packet::{CodingInfo, PacketID};
 
 pub mod greedy_strategy;
 pub mod none_strategy;
