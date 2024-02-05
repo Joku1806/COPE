@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use cope_config::types::node_id::NodeID;
 
@@ -6,13 +6,13 @@ use crate::{
     kbase::{KBase, SimpleKBase},
     packet::{packet::CodingHeader, Ack, CodingInfo, PacketBuilder, PacketData},
     packet_pool::{PacketPool, SimplePacketPool},
-    stats::Stats,
     topology::Topology,
     Packet,
 };
 
 use super::{
-    retrans_queue::RetransQueue, CodingError, CodingStrategy, QUEUE_SIZE, RETRANS_DURATION,
+    retrans_queue::RetransQueue, CodingError, CodingStrategy, CONTROL_PACKET_DURATION, QUEUE_SIZE,
+    RETRANS_DURATION,
 };
 
 pub struct RelayNodeCoding {
@@ -20,6 +20,7 @@ pub struct RelayNodeCoding {
     kbase: SimpleKBase,
     retrans_queue: RetransQueue,
     acks: Vec<Ack>,
+    last_packet_send: Instant,
 }
 
 impl RelayNodeCoding {
@@ -29,6 +30,7 @@ impl RelayNodeCoding {
             kbase: SimpleKBase::new(tx_list, QUEUE_SIZE),
             retrans_queue: RetransQueue::new(QUEUE_SIZE, RETRANS_DURATION),
             acks: vec![],
+            last_packet_send: Instant::now(),
         }
     }
 
@@ -49,6 +51,14 @@ impl RelayNodeCoding {
             }
         }
         true
+    }
+
+    fn set_last_packet_send(&mut self) {
+        self.last_packet_send = Instant::now();
+    }
+
+    fn should_tx_control(&self) -> bool {
+        self.last_packet_send.elapsed() > CONTROL_PACKET_DURATION
     }
 
     fn has_coding_opp(&self) -> bool {
@@ -151,6 +161,24 @@ impl CodingStrategy for RelayNodeCoding {
         }
 
         if !self.has_coding_opp() {
+            if self.should_tx_control() {
+                let result = PacketBuilder::new()
+                    .sender(topology.id())
+                    .control_header()
+                    .ack_header(std::mem::take(&mut self.acks))
+                    .build();
+                log::warn!("[Relay {}]: Send Control Packet", topology.id());
+                match result {
+                    Ok(control_packet) => return Ok(Some(control_packet)),
+                    Err(e) => {
+                        return Err(CodingError::DefectPacketError(format!(
+                            "[Relay {}]: Failed to build Control Packet, because {}",
+                            topology.id(),
+                            e
+                        )))
+                    }
+                }
+            }
             return Ok(None);
         }
 

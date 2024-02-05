@@ -10,7 +10,9 @@ use crate::{packet::PacketData, topology::Topology};
 use std::time::Duration;
 
 pub const QUEUE_SIZE: usize = 8;
-pub const RETRANS_DURATION: Duration = Duration::from_millis(800);
+pub const RETRANS_DURATION: Duration = Duration::from_millis(5000);
+pub const CONTROL_PACKET_DURATION: Duration = Duration::from_millis(100);
+
 
 pub trait CodingStrategy {
     fn handle_rx(
