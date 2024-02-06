@@ -76,8 +76,8 @@ pub fn decode<PP: PacketPool>(
 mod test {
     use super::*;
     use crate::{
-        packet::{Packet, CodingHeader as CH, PacketBuilder},
-        packet_pool::SimplePacketPool
+        packet::{CodingHeader as CH, Packet, PacketBuilder},
+        packet_pool::SimplePacketPool,
     };
 
     #[test]
@@ -115,7 +115,7 @@ mod test {
 
     struct TestState {
         node_a: NodeID,
-        node_b: NodeID,
+        _node_b: NodeID,
         node_c: NodeID,
 
         p0: Packet,
@@ -169,7 +169,7 @@ mod test {
 
             Self {
                 node_a,
-                node_b,
+                _node_b: node_b,
                 node_c,
                 p0,
                 p1,

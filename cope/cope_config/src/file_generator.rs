@@ -6,14 +6,12 @@ use crate::config::TmpConfig;
 use crate::types::mac_address::MacAddress;
 use crate::types::node_id::NodeID;
 use crate::types::traffic_generator_type::TrafficGeneratorType;
-use std::fmt::format;
 use std::fs;
 use std::io::Write;
 
 pub fn generate(config: &TmpConfig, path: &String) {
     let mut file = fs::File::create(path).unwrap();
     let node_count = config.nodes().len();
-    let simulator_packet_loss = config.simulator_packet_loss;
     // TODO: check for correcness of input
     // TODO: remove all the unwraps
     writeln!(
@@ -59,12 +57,7 @@ pub fn generate(config: &TmpConfig, path: &String) {
     )
     .unwrap();
 
-    writeln!(
-        file,
-        "    use_coding: {},",
-        config.use_coding
-    )
-    .unwrap();
+    writeln!(file, "    use_coding: {},", config.use_coding).unwrap();
     writeln!(file, "    packet_pool_size: {},", config.packet_pool_size).unwrap();
     write_nodes(&mut file, config);
     write_relay(&mut file, config);

@@ -37,7 +37,7 @@ pub enum EspChannelError {
     FrameDecodingError(FrameError),
     // FIXME: Stupid name, try to find a better one
     PacketDecodingError(FrameCollectionError),
-    EspNowFrameDecodingError(EspNowDecodingError),
+    _EspNowFrameDecodingError(EspNowDecodingError),
     EspNowTransmissionError(EspError),
     EspNowTransmissionCallbackError(MacAddress),
 }
@@ -72,7 +72,7 @@ impl std::fmt::Display for EspChannelError {
                     e
                 )
             }
-            EspChannelError::EspNowFrameDecodingError(e) => {
+            EspChannelError::_EspNowFrameDecodingError(e) => {
                 // FIXME: Implement Display trait for EspNowDecodingError
                 write!(f, "could not decode bytes into EspNow frame: {:?}", e)
             }

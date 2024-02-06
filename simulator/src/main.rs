@@ -1,8 +1,6 @@
 use std::sync::mpsc::channel;
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
-use std::thread::sleep;
-use std::time::Duration;
 
 use cope::config::CONFIG;
 use cope::stats::{Stats, StatsLogger};
@@ -38,7 +36,6 @@ fn main() -> anyhow::Result<()> {
 
         std::thread::spawn(move || loop {
             node.tick();
-            // sleep(Duration::from_millis(100));
         });
     }
 

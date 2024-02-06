@@ -7,7 +7,6 @@ use core::fmt;
 
 use super::Packet;
 use crate::{packet::PacketData, topology::Topology};
-use std::time::Duration;
 
 pub const MAX_RETRANS_AMOUNT: u8 = 2;
 

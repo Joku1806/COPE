@@ -1,10 +1,7 @@
 use std::time::Instant;
 
 use crate::{
-    coding::{
-        self,
-        decode_util::{decode, remove_from_pool},
-    },
+    coding::decode_util::{decode, remove_from_pool},
     config::CONFIG,
     packet::{packet::CodingHeader, Ack, CodingInfo, PacketBuilder, PacketData},
     packet_pool::{PacketPool, SimplePacketPool},
@@ -124,7 +121,7 @@ impl CodingStrategy for LeafNodeCoding {
             let packet = builder.ack_header(vec![ack]).build().unwrap();
             self.packet_pool.push_packet(packet.clone());
 
-            let CodingHeader::Native(info) = packet.coding_header() else {
+            let CodingHeader::Native(_info) = packet.coding_header() else {
                 return Err(CodingError::DefectPacketError(
                     "Expected to retransmit Native Packet".into(),
                 ));

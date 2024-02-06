@@ -8,7 +8,6 @@ use serde::Deserialize;
 use std::env;
 use std::fs;
 use std::str::FromStr;
-use std::time::Duration;
 
 #[derive(Deserialize)]
 struct TOMLConfig {

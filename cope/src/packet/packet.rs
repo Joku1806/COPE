@@ -97,7 +97,7 @@ impl Packet {
 pub struct PacketBuilder {
     sender: Option<NodeID>,
     coding_header: Option<CodingHeader>,
-    reception_header: Option<Vec<ReceptionReport>>,
+    _reception_header: Option<Vec<ReceptionReport>>,
     ack_header: Option<Vec<Ack>>,
     data: Option<PacketData>,
 }
