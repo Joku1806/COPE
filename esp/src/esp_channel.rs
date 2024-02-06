@@ -226,15 +226,15 @@ impl EspChannel {
         promiscuous_wifi::set_promiscuous_rx_callback(&mut self.wifi_driver, rx_callback)?;
 
         let tx_callback_done_clone = self.tx_callback_done.clone();
-        let tx_result_clone = self.tx_callback_result.clone();
+        let tx_callback_result_clone = self.tx_callback_result.clone();
         self.espnow_driver
             .register_send_cb(move |mac: &[u8], status: SendStatus| {
-                if matches!(status, SendStatus::FAIL) {
-                    *tx_result_clone.lock().unwrap() =
-                        Err(EspChannelError::EspNowTransmissionCallbackError(
-                            MacAddress::new(mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]),
-                        ));
-                }
+                *tx_callback_result_clone.lock().unwrap() = match status {
+                    SendStatus::SUCCESS => Ok(()),
+                    SendStatus::FAIL => Err(EspChannelError::EspNowTransmissionCallbackError(
+                        MacAddress::new(mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]),
+                    )),
+                };
 
                 *tx_callback_done_clone.lock().unwrap() = true;
             })?;
@@ -343,15 +343,11 @@ impl Channel for EspChannel {
                 // can fail if you send too quickly.
                 while !*self.tx_callback_done.lock().unwrap() {}
                 *self.tx_callback_done.lock().unwrap() = false;
-                let mut tx_callback_result = self.tx_callback_result.lock().unwrap();
+                let tx_callback_result = self.tx_callback_result.lock().unwrap();
 
                 // FIXME: Refactor this entire error handling code, it is hard to understand and
                 // I have already found multiple bugs here.
                 if result.is_err() {
-                    if tx_callback_result.is_err() {
-                        *tx_callback_result = Ok(());
-                    }
-
                     // TODO: Should we return an error here? We have not sent the other frames yet.
                     return Err(Box::new(EspChannelError::EspNowTransmissionError(
                         result.err().unwrap(),
@@ -369,8 +365,6 @@ impl Channel for EspChannel {
                     let copy: Result<(), Box<dyn std::error::Error>> = Err(Box::new(
                         EspChannelError::EspNowTransmissionCallbackError(mac),
                     ));
-
-                    *tx_callback_result = Ok(());
 
                     return copy;
                 }
