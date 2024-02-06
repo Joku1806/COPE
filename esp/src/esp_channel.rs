@@ -24,6 +24,7 @@ use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
+const RX_QUEUE_MAX_SIZE: usize = 128;
 const ESPNOW_FRAME_SIZE: u8 = 250;
 
 #[derive(Debug)]
@@ -193,11 +194,14 @@ impl EspChannel {
                 Err(e) => return Err(Box::new(EspChannelError::FrameDecodingError(e))),
             };
 
-            // FIXME: Set a limit for the size of this buffer! With target throughput of >
-            // 1Mb it panics after ~30s
             let mut buffer = rx_buffer_clone.lock().unwrap();
 
             if !buffer.contains_key(&partial_frame.get_magic()) {
+                if buffer.len() >= RX_QUEUE_MAX_SIZE {
+                    log::warn!("Have to drop packet, because RX queue is full!");
+                    return Ok(());
+                }
+
                 buffer.insert(
                     partial_frame.get_magic(),
                     (SystemTime::now(), FrameCollection::new()),
