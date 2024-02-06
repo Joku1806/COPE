@@ -229,8 +229,6 @@ impl EspChannel {
         let tx_result_clone = self.tx_callback_result.clone();
         self.espnow_driver
             .register_send_cb(move |mac: &[u8], status: SendStatus| {
-                // NOTE: It is not possible for the send callback to return an error, so we have
-                // to log them here, which is kind of annoying.
                 if matches!(status, SendStatus::FAIL) {
                     *tx_result_clone.lock().unwrap() =
                         Err(EspChannelError::EspNowTransmissionCallbackError(
@@ -345,15 +343,21 @@ impl Channel for EspChannel {
                 // can fail if you send too quickly.
                 while !*self.tx_callback_done.lock().unwrap() {}
                 *self.tx_callback_done.lock().unwrap() = false;
+                let mut tx_callback_result = self.tx_callback_result.lock().unwrap();
 
+                // FIXME: Refactor this entire error handling code, it is hard to understand and
+                // I have already found multiple bugs here.
                 if result.is_err() {
+                    if tx_callback_result.is_err() {
+                        *tx_callback_result = Ok(());
+                    }
+
                     // TODO: Should we return an error here? We have not sent the other frames yet.
                     return Err(Box::new(EspChannelError::EspNowTransmissionError(
                         result.err().unwrap(),
                     )));
                 }
 
-                let mut tx_callback_result = self.tx_callback_result.lock().unwrap();
                 if tx_callback_result.is_err() {
                     // TODO: There has to be a better way to do this in Rust.
                     // This is the ugliest code I have ever written.
