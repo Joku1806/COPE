@@ -195,6 +195,8 @@ impl EspChannel {
                 Err(e) => return Err(Box::new(EspChannelError::FrameDecodingError(e))),
             };
 
+            // FIXME: Set a limit for the size of this buffer! With target throughput of >
+            // 1Mb it panics after ~30s
             let mut buffer = rx_buffer_clone.lock().unwrap();
 
             if !buffer.contains_key(&partial_frame.get_magic()) {
@@ -403,6 +405,9 @@ impl Channel for EspChannel {
 
                 return true;
             });
+
+        // NOTE: free memory after cleaning out map
+        self.rx_buffer.lock().unwrap().shrink_to_fit();
 
         packet
     }
