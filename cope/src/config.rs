@@ -9,6 +9,8 @@ pub const CONFIG: Config<3> = Config{
     simulator_packet_loss: 0.000,
     round_trip_time: Duration::new(1, 500000000),
     control_packet_duration: Duration::new(0, 200000000),
+    max_retrans_amount: 2,
+    use_coding: true,
     packet_pool_size: 8,
     nodes: [
         (NodeID::new('A'), MacAddress::new(52, 133, 24, 185, 27, 156)),

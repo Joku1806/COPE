@@ -3,9 +3,10 @@ use std::{
     usize,
 };
 
-use crate::packet::{CodingInfo, PacketData};
-
-use super::MAX_RETRANS_AMOUNT;
+use crate::{
+    config::CONFIG,
+    packet::{CodingInfo, PacketData},
+};
 
 #[derive(Debug)]
 pub struct RetransEntry {
@@ -55,7 +56,7 @@ impl RetransQueue {
         };
 
         let new_instant = Instant::now();
-        if self.queue[entry_pos].retrans_count < MAX_RETRANS_AMOUNT {
+        if self.queue[entry_pos].retrans_count < CONFIG.max_retrans_amount {
             let entry = &mut self.queue[entry_pos];
             entry.last_trans = new_instant;
             entry.retrans_count += 1;

@@ -51,6 +51,20 @@ pub fn generate(config: &TmpConfig, path: &String) {
         config.control_packet_duration.subsec_nanos()
     )
     .unwrap();
+
+    writeln!(
+        file,
+        "    max_retrans_amount: {},",
+        config.max_retrans_amount
+    )
+    .unwrap();
+
+    writeln!(
+        file,
+        "    use_coding: {},",
+        config.use_coding
+    )
+    .unwrap();
     writeln!(file, "    packet_pool_size: {},", config.packet_pool_size).unwrap();
     write_nodes(&mut file, config);
     write_relay(&mut file, config);

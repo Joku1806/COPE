@@ -82,14 +82,16 @@ impl RelayNodeCoding {
         topo: &Topology,
     ) -> Result<Packet, CodingError> {
         let mut packets: Vec<(CodingInfo, PacketData)> = vec![packet];
-        for &nexthop in topo.txlist() {
-            let Some(packet) = self.packet_pool.peek_nexthop_front(nexthop) else {
-                continue;
-            };
+        if CONFIG.use_coding {
+            for &nexthop in topo.txlist() {
+                let Some(packet) = self.packet_pool.peek_nexthop_front(nexthop) else {
+                    continue;
+                };
 
-            if self.all_nexhops_can_decode(&packets, packet) {
-                let p = self.packet_pool.pop_nexthop_front(nexthop).unwrap();
-                packets.push(p);
+                if self.all_nexhops_can_decode(&packets, packet) {
+                    let p = self.packet_pool.pop_nexthop_front(nexthop).unwrap();
+                    packets.push(p);
+                }
             }
         }
         let (header, data) = encode(&packets);

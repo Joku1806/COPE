@@ -21,6 +21,8 @@ struct TOMLConfig {
     round_trip_time: String,
     packet_pool_size: usize,
     control_packet_duration: String,
+    max_retrans_amount: u8,
+    use_coding: bool,
 }
 
 fn main() {
@@ -107,6 +109,8 @@ fn main() {
     let packet_pool_size = toml_config.packet_pool_size;
     let control_packet_duration =
         parse_duration::parse(&toml_config.control_packet_duration).unwrap();
+    let max_retrans_amount = toml_config.max_retrans_amount;
+    let use_coding = toml_config.use_coding;
 
     let config = TmpConfig::new(
         nodes,
@@ -118,6 +122,8 @@ fn main() {
         round_trip_time,
         packet_pool_size,
         control_packet_duration,
+        max_retrans_amount,
+        use_coding,
     );
     let dest_path = "src/config.rs";
     generate(&config, &dest_path.to_string());

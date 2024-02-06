@@ -27,3 +27,6 @@ simulator_packet_loss = 0.0
 round_trip_time = "1.5s"
 packet_pool_size = 8
 control_packet_duration = "200ms"
+max_retrans_amount = 2
+use_coding = true
+
