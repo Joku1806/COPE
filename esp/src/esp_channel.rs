@@ -24,8 +24,6 @@ use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-// TODO: Make settable from config
-const RX_DRAIN_TIME: Duration = Duration::from_millis(1000);
 const ESPNOW_FRAME_SIZE: u8 = 250;
 
 #[derive(Debug)]
@@ -381,9 +379,9 @@ impl Channel for EspChannel {
                     Err(_) => Duration::ZERO,
                 };
 
-                // NOTE: Any incomplete packets, where the last frame was received RX_DRAIN_TIME
+                // NOTE: Any incomplete packets, where the last frame was received RTT
                 // ago are assumed to be lost and should be removed.
-                if elapsed >= RX_DRAIN_TIME && !collection.is_complete() {
+                if elapsed >= CONFIG.round_trip_time && !collection.is_complete() {
                     return false;
                 }
 
