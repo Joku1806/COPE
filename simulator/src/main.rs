@@ -32,7 +32,7 @@ fn main() -> anyhow::Result<()> {
         let stats = Arc::new(Mutex::new(Stats::new(*id, Box::new(logger))));
         let mut node = Node::new(
             *id,
-            Box::new(SimulatorChannel::new(node_rx, tx.clone(), &stats)),
+            Box::new(SimulatorChannel::new(node_rx, tx.clone())),
             &stats,
         );
 

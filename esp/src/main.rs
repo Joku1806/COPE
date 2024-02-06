@@ -57,7 +57,6 @@ fn main() -> anyhow::Result<()> {
 
     let logger = EspStatsLogger::new(format!("./log/esp/log_{}", id.unwrap()).as_str()).unwrap();
     let stats = Arc::new(Mutex::new(Stats::new(id, Box::new(logger))));
-    esp_channel.set_statistics(&stats);
     let mut node = Node::new(id, Box::new(esp_channel), &stats);
 
     loop {

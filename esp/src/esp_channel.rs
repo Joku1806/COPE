@@ -5,7 +5,7 @@ use crate::wifi_frame::WifiFrame;
 use cope::channel::Channel;
 use cope::config::CONFIG;
 use cope::packet::Packet;
-use cope::stats::{Stats, StatsLogger};
+use cope::stats::StatsLogger;
 use cope_config::types::{mac_address::MacAddress, node_id::NodeID};
 use esp_idf_svc::sys::EspError;
 use esp_idf_svc::{
@@ -114,7 +114,6 @@ pub struct EspChannel {
     rx_buffer: Arc<Mutex<HashMap<u32, (SystemTime, FrameCollection)>>>,
     tx_callback_done: Arc<Mutex<bool>>,
     tx_callback_result: Arc<Mutex<Result<(), EspChannelError>>>,
-    stats: Option<Arc<Mutex<Stats>>>,
 }
 
 impl EspChannel {
@@ -134,12 +133,7 @@ impl EspChannel {
             rx_buffer: Arc::new(Mutex::new(HashMap::new())),
             tx_callback_done: Arc::new(Mutex::new(false)),
             tx_callback_result: Arc::new(Mutex::new(Ok(()))),
-            stats: None,
         })
-    }
-
-    pub fn set_statistics(&mut self, stats: &Arc<Mutex<Stats>>) {
-        self.stats = Some(Arc::clone(stats));
     }
 
     fn set_wifi_config_and_start(&mut self) -> Result<(), EspError> {
@@ -370,11 +364,6 @@ impl Channel for EspChannel {
             }
         }
 
-        if let Some(stats) = &self.stats {
-            stats.lock().unwrap().add_sent(packet);
-            stats.lock().unwrap().log_data();
-        }
-
         Ok(())
     }
 
@@ -414,16 +403,6 @@ impl Channel for EspChannel {
 
                 return true;
             });
-
-        if packet.is_some() {
-            if let Some(stats) = &self.stats {
-                stats
-                    .lock()
-                    .unwrap()
-                    .add_received_before_decode_attempt(packet.as_ref().unwrap());
-                stats.lock().unwrap().log_data();
-            }
-        }
 
         packet
     }

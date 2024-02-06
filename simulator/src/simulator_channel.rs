@@ -1,10 +1,8 @@
 use cope::packet::Packet;
-use cope::stats::Stats;
 use cope::{channel::Channel, stats::StatsLogger};
 use std::fs::OpenOptions;
 use std::io::LineWriter;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use std::{
     error::Error,
     io::Write,
@@ -48,7 +46,6 @@ impl StatsLogger for SimulatorStatsLogger {
 pub struct SimulatorChannel {
     rx: Receiver<Packet>,
     tx: Sender<Packet>,
-    stats: Arc<Mutex<Stats>>,
 }
 
 // TODO: Figure out if this is needed
@@ -56,12 +53,8 @@ unsafe impl Send for SimulatorChannel {}
 unsafe impl Sync for SimulatorChannel {}
 
 impl SimulatorChannel {
-    pub fn new(rx: Receiver<Packet>, tx: Sender<Packet>, stats: &Arc<Mutex<Stats>>) -> Self {
-        SimulatorChannel {
-            rx,
-            tx,
-            stats: Arc::clone(stats),
-        }
+    pub fn new(rx: Receiver<Packet>, tx: Sender<Packet>) -> Self {
+        SimulatorChannel { rx, tx }
     }
 }
 
@@ -71,9 +64,6 @@ impl Channel for SimulatorChannel {
         if let Err(e) = self.tx.send(packet.clone()) {
             println!("{}", e);
         }
-
-        self.stats.lock().unwrap().add_sent(packet);
-        self.stats.lock().unwrap().log_data();
 
         Ok(())
     }
