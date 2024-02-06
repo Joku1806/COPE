@@ -1,6 +1,11 @@
-use std::{time::{Instant, Duration}, usize};
+use std::{
+    time::{Duration, Instant},
+    usize,
+};
 
 use crate::packet::{CodingInfo, PacketData};
+
+use super::MAX_RETRANS_AMOUNT;
 
 #[derive(Debug)]
 pub struct RetransEntry {
@@ -31,7 +36,10 @@ impl RetransQueue {
     }
 
     pub fn conatains(&self, info: &CodingInfo) -> bool {
-        self.queue.iter().find(|entry| entry.info == *info).is_some()
+        self.queue
+            .iter()
+            .find(|entry| entry.info == *info)
+            .is_some()
     }
 
     pub fn len(&self) -> usize {
@@ -39,17 +47,24 @@ impl RetransQueue {
     }
 
     pub fn packet_to_retrans(&mut self) -> Option<(CodingInfo, PacketData)> {
-        for entry in self.queue.iter_mut() {
+        let Some(entry_pos) = self.queue.iter().position(|entry| {
             let duration = entry.last_trans.elapsed();
-            if duration >= self.retrans_duration {
-                let new_instant = Instant::now();
-                entry.last_trans = new_instant;
-                entry.retrans_count += 1;
-                return Some((entry.info.clone(), entry.data.clone()));
-            }
-        }
+            duration >= self.retrans_duration
+        }) else {
+            return None;
+        };
 
-        None
+        let new_instant = Instant::now();
+        if self.queue[entry_pos].retrans_count < MAX_RETRANS_AMOUNT {
+            let entry = &mut self.queue[entry_pos];
+            entry.last_trans = new_instant;
+            entry.retrans_count += 1;
+            return Some((entry.info.clone(), entry.data.clone()));
+        }
+        let mut entry = self.queue.remove(entry_pos);
+        entry.last_trans = new_instant;
+        entry.retrans_count += 1;
+        return Some((entry.info, entry.data));
     }
 
     pub fn push_new(&mut self, packet: (CodingInfo, PacketData)) {

@@ -38,7 +38,7 @@ fn main() -> anyhow::Result<()> {
 
         std::thread::spawn(move || loop {
             node.tick();
-            sleep(Duration::from_millis(100));
+            // sleep(Duration::from_millis(100));
         });
     }
 
