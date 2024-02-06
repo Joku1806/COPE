@@ -183,7 +183,7 @@ impl EspChannel {
                 Err(_e) => return Ok(()),
             };
 
-            log::info!(
+            log::debug!(
                 "Received an EspNow frame {:?} with packet type {:?}",
                 espnow_frame,
                 pkt_type
@@ -272,7 +272,7 @@ impl EspChannel {
     }
 
     fn add_unicast_peer(&self, peer: &MacAddress) -> Result<(), EspError> {
-        log::info!("Add unicast peer with MAC address {}", peer);
+        log::debug!("Add unicast peer with MAC address {}", peer);
 
         let mut peer_info = PeerInfo::default();
         peer_info.peer_addr = peer.into_array();
@@ -307,14 +307,14 @@ impl Channel for EspChannel {
                 }
             }
 
-            log::info!("Sending {:?} to {}", packet, mac);
+            log::debug!("Sending {:?} to {}", packet, mac);
 
             let serialized = match packet.serialize_into() {
                 Ok(s) => s,
                 Err(e) => return Err(Box::new(EspChannelError::SerializationError(e))),
             };
 
-            log::info!(
+            log::debug!(
                 "Serialized packet: {:?} ({} Bytes)",
                 serialized,
                 serialized.len()
@@ -329,12 +329,12 @@ impl Channel for EspChannel {
                 return Err(Box::new(EspChannelError::FrameEncodingError(e)));
             }
 
-            log::info!("Encoded as Frames: {:?}", frames);
+            log::debug!("Encoded as Frames: {:?}", frames);
 
             for frame in frames.iter() {
                 // TODO: Make this work without clone
                 let frame_serialized: Vec<u8> = frame.clone().unwrap().into();
-                log::info!("Transmitting: {:?}", frame_serialized);
+                log::debug!("Transmitting: {:?}", frame_serialized);
 
                 let result = self
                     .espnow_driver
@@ -415,7 +415,7 @@ impl Channel for EspChannel {
         // NOTE: free memory after cleaning out map
         self.rx_buffer.lock().unwrap().shrink_to_fit();
 
-        log::info!(
+        log::debug!(
             "RX queue has {} packets ready for dequeing",
             self.rx_buffer.lock().unwrap().len()
         );
