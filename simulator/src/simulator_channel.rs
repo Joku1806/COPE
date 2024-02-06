@@ -79,17 +79,6 @@ impl Channel for SimulatorChannel {
     }
 
     fn receive(&mut self) -> Option<Packet> {
-        // TODO: refactor
-        match self.rx.try_recv() {
-            Ok(packet) => {
-                self.stats
-                    .lock()
-                    .unwrap()
-                    .add_received_before_decode_attempt(&packet);
-                self.stats.lock().unwrap().log_data();
-                return Some(packet);
-            }
-            Err(_) => None,
-        }
+        self.rx.try_recv().ok()
     }
 }
