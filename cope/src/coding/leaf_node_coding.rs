@@ -41,7 +41,6 @@ impl LeafNodeCoding {
         }
     }
 
-
     fn should_tx_control(&self) -> bool {
         if self.acks.len() == 0 {
             return false;
@@ -56,10 +55,11 @@ impl CodingStrategy for LeafNodeCoding {
         packet: &Packet,
         topology: &Topology,
     ) -> Result<Option<PacketData>, CodingError> {
+        let original_data = packet.data().clone();
         let is_from_relay = packet.sender() == topology.relay();
         if !is_from_relay {
-            //store for coding
-            return Ok(None);
+            // store for coding
+            return Ok(Some(original_data));
         }
         // handle acks
         let acks = packet.ack_header();
@@ -81,14 +81,14 @@ impl CodingStrategy for LeafNodeCoding {
                 let is_next_hop = topology.id() == coding_info.nexthop;
                 if !is_next_hop {
                     // store for coding
-                    return Ok(None);
+                    return Ok(Some(original_data));
                 }
             }
             CodingHeader::Encoded(coding_info) => {
                 // check if node is next_hop for packet
                 if !is_next_hop(topology.id(), coding_info) {
                     log::info!("[Node {}]: Not a next hop of Packet.", topology.id());
-                    return Ok(None);
+                    return Ok(Some(original_data));
                 }
                 // decode
                 // TODO: add acks to the thing
@@ -100,11 +100,11 @@ impl CodingStrategy for LeafNodeCoding {
                 return Ok(Some(decoded_data));
             }
             CodingHeader::Control(_) => {
-                return Ok(None);
+                return Ok(Some(original_data));
             }
         }
 
-        Ok(Some(packet.data().clone()))
+        Ok(Some(original_data))
     }
 
     fn handle_tx(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError> {

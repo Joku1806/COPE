@@ -113,25 +113,10 @@ impl Stats {
         };
     }
 
-    // TODO: Have one single function instead of splitting weirdly between before and after decode.
-    // Right now it is not very clear when packets_received should be increased, for example.
-    pub fn add_received_before_decode_attempt(&mut self, packet: &Packet) {
-        self.target_id = packet.sender();
-        self.packets_received += 1;
-        // FIXME: Use different data_received fields, depending on the packet being encoded or decoded.
-        // self.data_received += packet.data().len() as u32;
-
-        match packet.coding_header() {
-            CodingHeader::Native(_) => self.natives_received += 1,
-            CodingHeader::Encoded(_) => (),
-            CodingHeader::Control(_) => self.reports_received += 1,
-        }
-    }
-
-    // TODO: Refactor caller to be able to pass Packet in all cases
-    pub fn add_received_after_decode_attempt(
+    pub fn add_received(
         &mut self,
         sender: NodeID,
+        coding_header: &CodingHeader,
         data_size: u32,
         decode_successful: bool,
     ) {
@@ -139,9 +124,11 @@ impl Stats {
         self.data_received += data_size;
         self.packets_received += 1;
 
-        match decode_successful {
-            true => self.decoded_received += 1,
-            false => self.coded_received += 1,
+        match (coding_header, decode_successful) {
+            (CodingHeader::Native(_), _) => self.natives_received += 1,
+            (CodingHeader::Encoded(_), true) => self.decoded_received += 1,
+            (CodingHeader::Encoded(_), false) => self.coded_received += 1,
+            (CodingHeader::Control(_), _) => self.reports_received += 1,
         };
     }
 

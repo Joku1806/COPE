@@ -88,36 +88,27 @@ impl Node {
             if !self.topology.can_receive_from(packet.sender()) {
                 return;
             }
-            log::info!("[Node {}]: Received {:?}", self.id, &packet.coding_header());
 
-            // self.stats
-            //     .lock()
-            //     .unwrap()
-            //     .add_received_before_decode_attempt(&packet);
-            // self.stats.lock().unwrap().log_data();
+            log::info!("[Node {}]: Received {:?}", self.id, &packet.coding_header());
 
             match self.coding.handle_rx(&packet, &self.topology) {
                 Ok(Some(data)) => {
-                    self.stats
-                        .lock()
-                        .unwrap()
-                        .add_received_after_decode_attempt(
-                            packet.sender(),
-                            data.len() as u32,
-                            true,
-                        );
+                    self.stats.lock().unwrap().add_received(
+                        packet.sender(),
+                        packet.coding_header(),
+                        data.len() as u32,
+                        true,
+                    );
                     self.stats.lock().unwrap().log_data();
                 }
                 Err(e) => {
                     log::error!("{}", e);
-                    self.stats
-                        .lock()
-                        .unwrap()
-                        .add_received_after_decode_attempt(
-                            packet.sender(),
-                            packet.data().len() as u32,
-                            false,
-                        );
+                    self.stats.lock().unwrap().add_received(
+                        packet.sender(),
+                        packet.coding_header(),
+                        packet.data().len() as u32,
+                        false,
+                    );
                     self.stats.lock().unwrap().log_data();
                 }
                 _ => (),

@@ -131,6 +131,8 @@ impl CodingStrategy for RelayNodeCoding {
         packet: &Packet,
         topology: &Topology,
     ) -> Result<Option<PacketData>, CodingError> {
+        let original_data = packet.data().clone();
+
         if let CodingHeader::Control(_) = packet.coding_header() {
             let acks = packet.ack_header();
             for ack in acks {
@@ -140,7 +142,7 @@ impl CodingStrategy for RelayNodeCoding {
                 }
                 self.acks.push(ack.clone());
             }
-            return Ok(None);
+            return Ok(Some(original_data));
         }
 
         let CodingHeader::Native(coding_info) = packet.coding_header() else {
@@ -168,7 +170,7 @@ impl CodingStrategy for RelayNodeCoding {
             self.kbase.size()
         );
 
-        Ok(Some(packet.data().clone()))
+        Ok(Some(original_data))
     }
 
     fn handle_tx(&mut self, topology: &Topology) -> Result<Option<Packet>, CodingError> {
