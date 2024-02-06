@@ -26,11 +26,16 @@ def main():
         for file in files:
             csv_file = os.path.join(root, file)
             try:
-                df = DataReader(csv_file).read()
-                plotter = Plotter(df, "results", f"Node {strip_name(file)}")
+                df = DataReader([csv_file]).read()
+                plotter = Plotter(
+                    df,
+                    "results",
+                    f"Node {strip_name(file)}",
+                    interactive=True,
+                    set_figure_title=True,
+                )
 
                 plotter.plot_rx_throughput_over_time()
-                plotter.plot_rx_tx_barchart()
                 plotter.plot_percent_decoded_over_time()
             except FileNotFoundError:
                 print(f"Error: File '{csv_file}' not found.")
@@ -38,6 +43,17 @@ def main():
                 print(
                     f"Error: File '{csv_file}' is empty or not in the expected CSV format."
                 )
+
+        joined_paths = [os.path.join(root, f) for f in files]
+        df = DataReader(joined_paths).read()
+        plotter = Plotter(
+            df,
+            "results",
+            f"All Nodes",
+            interactive=True,
+            set_figure_title=True,
+        )
+        plotter.plot_rx_tx_barchart()
 
 
 if __name__ == "__main__":

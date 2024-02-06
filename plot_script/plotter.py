@@ -64,14 +64,11 @@ class Plotter:
     def plot_rx_throughput_over_time(self):
         fig, ax = plt.subplots()
 
-        df = self.df[["time_us", "decoded_received"]]
-        df["decoded_data_received"] = (
-            self.df["data_received"] * self.df["decoded_received"]
-        )
+        df = self.df[["time_us", "data_received"]]
         # TODO: Check if we want origin="start" or not
-        df_sec = df.resample("1s", on="time_us", origin="start").sum()
+        df_sec = df.rolling("1s", on="time_us").sum()
 
-        ax.plot(df_sec.index, df_sec["decoded_data_received"])
+        ax.plot(df_sec["time_us"], df_sec["data_received"])
 
         ax.xaxis.set_major_formatter(Plotter.timedelta_seconds_formatter())
         ax.set_xlabel("Time [s]")
@@ -94,8 +91,11 @@ class Plotter:
             ).fillna(0),
         )
 
+        ax.set_ylim(0.0, 1.0 + 0.1)
+
         ax.xaxis.set_major_formatter(Plotter.timedelta_seconds_formatter())
         ax.yaxis.set_major_formatter(Plotter.percent_formatter())
+
         ax.set_xlabel("Time [s]")
         ax.set_ylabel("Decoded %")
 
@@ -107,23 +107,24 @@ class Plotter:
     def plot_rx_tx_barchart(self):
         fig, ax = plt.subplots()
 
-        nodes = self.df["target_id"].unique()
+        nodes = self.df["node_id"].unique()
+        df = self.df[
+            (self.df["time_us"] >= pd.Timedelta(10, unit="s"))
+            & (
+                self.df["time_us"]
+                <= self.df.iloc[-1]["time_us"] - pd.Timedelta(5, unit="s")
+            )
+        ]
         throughputs = {
             "data_sent": [],
             "data_received": [],
         }
-        secs = self.df.iloc[-1]["time_us"].seconds
+        secs = df.iloc[-1]["time_us"].seconds
 
         for n in nodes:
-            rx = self.df[
-                (self.df["target_id"] == n) & (self.df["decoded_received"] != 0)
-            ]["data_received"]
-            throughputs["data_received"].append(rx.sum() / secs)
-
-            tx = self.df[(self.df["target_id"] == n) & (self.df["packets_sent"] != 0)][
-                "data_sent"
-            ]
-            throughputs["data_sent"].append(tx.sum() / secs)
+            for l in ["data_received", "data_sent"]:
+                tp = df[df["node_id"] == n][l].sum() / secs
+                throughputs[l].append(tp)
 
         x = np.arange(len(nodes))  # the label locations
         width = 0.25  # the width of the bars
