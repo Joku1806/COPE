@@ -40,12 +40,22 @@ impl RelayNodeCoding {
         packets: &Vec<(CodingInfo, PacketData)>,
         packet: &(CodingInfo, PacketData),
     ) -> bool {
+        if packets
+            .iter()
+            .find(|(c, _)| c.nexthop == packet.0.nexthop)
+            .is_some()
+        {
+            return false;
+        }
+
         let iter = std::iter::once(packet).chain(packets);
+
         for (CodingInfo { nexthop, .. }, _) in iter {
             let iter1 = std::iter::once(packet).chain(packets);
             for (info, _) in iter1 {
                 let knows = self.kbase.knows(nexthop, info);
                 let is_nexthop = *nexthop == info.nexthop;
+
                 if !knows && !is_nexthop {
                     return false;
                 }
@@ -53,7 +63,6 @@ impl RelayNodeCoding {
         }
         true
     }
-
 
     fn should_tx_control(&self) -> bool {
         if self.acks.len() == 0 {
@@ -121,7 +130,7 @@ impl CodingStrategy for RelayNodeCoding {
         topology: &Topology,
     ) -> Result<Option<PacketData>, CodingError> {
         if let CodingHeader::Control(_) = packet.coding_header() {
-        let acks = packet.ack_header();
+            let acks = packet.ack_header();
             for ack in acks {
                 for info in ack.packets() {
                     log::info!("[Relay {}]: Packet {:?} was acked.", topology.id(), info);

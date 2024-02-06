@@ -64,11 +64,14 @@ class Plotter:
     def plot_rx_throughput_over_time(self):
         fig, ax = plt.subplots()
 
-        df = self.df[["time_us", "data_received"]]
+        df = self.df[["time_us", "decoded_received"]]
+        df["decoded_data_received"] = (
+            self.df["data_received"] * self.df["decoded_received"]
+        )
         # TODO: Check if we want origin="start" or not
         df_sec = df.resample("1s", on="time_us", origin="start").sum()
 
-        ax.plot(df_sec.index, df_sec["data_received"])
+        ax.plot(df_sec.index, df_sec["decoded_data_received"])
 
         ax.xaxis.set_major_formatter(Plotter.timedelta_seconds_formatter())
         ax.set_xlabel("Time [s]")
@@ -112,11 +115,15 @@ class Plotter:
         secs = self.df.iloc[-1]["time_us"].seconds
 
         for n in nodes:
-            for l in ["data_sent", "data_received"]:
-                v = self.df[
-                    (self.df["target_id"] == n) & (self.df["decoded_received"] != 0)
-                ][l]
-                throughputs[l].append(v.sum() / secs)
+            rx = self.df[
+                (self.df["target_id"] == n) & (self.df["decoded_received"] != 0)
+            ]["data_received"]
+            throughputs["data_received"].append(rx.sum() / secs)
+
+            tx = self.df[(self.df["target_id"] == n) & (self.df["packets_sent"] != 0)][
+                "data_sent"
+            ]
+            throughputs["data_sent"].append(tx.sum() / secs)
 
         x = np.arange(len(nodes))  # the label locations
         width = 0.25  # the width of the bars

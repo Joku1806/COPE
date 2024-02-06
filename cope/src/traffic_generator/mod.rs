@@ -1,7 +1,7 @@
 use cope_config::types::{node_id::NodeID, traffic_generator_type::TrafficGeneratorType};
 
-use crate::packet::{CodingInfo, PacketID};
 use super::packet::PacketBuilder;
+use crate::packet::{CodingInfo, PacketID};
 
 pub mod greedy_strategy;
 pub mod none_strategy;
@@ -76,13 +76,12 @@ impl TrafficGenerator {
     }
 
     pub fn generate(&mut self) -> Option<PacketBuilder> {
-        let info = CodingInfo {
-            source: self.sender_id,
-            id: self.next_packet_id(),
-            nexthop: self.next_receiver(),
-        };
-        self.strategy
-            .generate()
-            .map(|builder| builder.sender(self.sender_id).native_header(info))
+        self.strategy.generate().map(|builder| {
+            builder.sender(self.sender_id).native_header(CodingInfo {
+                source: self.sender_id,
+                id: self.next_packet_id(),
+                nexthop: self.next_receiver(),
+            })
+        })
     }
 }

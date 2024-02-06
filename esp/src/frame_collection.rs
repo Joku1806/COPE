@@ -20,7 +20,7 @@ pub enum FrameCollectionError {
 // not just the first frame.
 #[derive(PartialEq, Clone, Debug)]
 pub enum FrameType {
-    First((u8, u8)),
+    First((u8, u8)), // frame count and max size of each frame
     Following,
 }
 
