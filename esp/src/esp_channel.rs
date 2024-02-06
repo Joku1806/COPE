@@ -310,7 +310,11 @@ impl Channel for EspChannel {
                 Err(e) => return Err(Box::new(EspChannelError::SerializationError(e))),
             };
 
-            log::info!("Serialized packet: {:?}", serialized);
+            log::info!(
+                "Serialized packet: {:?} ({} Bytes)",
+                serialized,
+                serialized.len()
+            );
 
             let mut frames = match FrameCollection::new().with_frame_size(ESPNOW_FRAME_SIZE) {
                 Ok(fc) => fc,
@@ -406,6 +410,11 @@ impl Channel for EspChannel {
 
         // NOTE: free memory after cleaning out map
         self.rx_buffer.lock().unwrap().shrink_to_fit();
+
+        log::info!(
+            "RX queue has {} packets ready for dequeing",
+            self.rx_buffer.lock().unwrap().len()
+        );
 
         packet
     }
