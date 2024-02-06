@@ -344,6 +344,7 @@ impl Channel for EspChannel {
                 // recommended practice in the esp-idf espnow guide. Apparently transmissions
                 // can fail if you send too quickly.
                 while !*self.tx_callback_done.lock().unwrap() {}
+                *self.tx_callback_done.lock().unwrap() = false;
 
                 if result.is_err() {
                     // TODO: Should we return an error here? We have not sent the other frames yet.
