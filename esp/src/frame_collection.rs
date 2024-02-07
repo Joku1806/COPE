@@ -184,7 +184,11 @@ impl FrameCollection {
         // FIXME: Do this without unwrap. In general, the many Optional<> fields in this
         // struct are awkward to work with.
         if index < self.frames.len() && self.frames.get(index).unwrap().is_some() {
-            return Err(FrameCollectionError::FrameAlreadyAdded);
+            // NOTE: We explicitly return Ok here, since our use case involves
+            // retransmitting entire packets, even if some frames could be received. On
+            // retransmit, we would of course hit this path. Because we know that the frames
+            // will be equal, we can just return early.
+            return Ok(());
         }
 
         match frame.ftype {
@@ -447,37 +451,6 @@ mod tests {
                 Err(FrameCollectionError::MismatchedMagic(0x23232323))
             ),
             "mismatched_magic_should_fail: Did not return MismatchedMagic Error"
-        );
-
-        Ok(())
-    }
-
-    #[test_case]
-    fn duplicate_index_should_fail() -> Result<(), Error> {
-        let mut collection = FrameCollection::new();
-
-        anyhow::ensure!(
-            collection
-                .add_frame(Frame::new(
-                    FrameType::First((2, 6)),
-                    0,
-                    0x1f1f1f1f,
-                    Vec::from([0x01, 0x23, 0x45]),
-                ))
-                .is_ok(),
-            "duplicate_index_should_fail: Could not add frame"
-        );
-
-        anyhow::ensure!(
-            matches!(collection
-                .add_frame(Frame::new(
-                    FrameType::First((2, 6)),
-                    0,
-                    0x1f1f1f1f,
-                    Vec::from([0x01, 0x23, 0x45]),
-                )),
-                Err(FrameCollectionError::FrameAlreadyAdded)),
-            "duplicate_index_should_fail: Could add duplicate frame, even though it is already present in the collection"
         );
 
         Ok(())
