@@ -19,7 +19,7 @@ use esp_idf_svc::{
     },
     wifi::{EspWifi, WifiDeviceId},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
@@ -33,9 +33,9 @@ pub enum EspChannelError {
     UnicastPeerError(MacAddress, EspError),
     SerializationError(bincode::Error),
     FrameEncodingError(FrameCollectionError),
-    FrameDecodingError(FrameError),
+    _FrameDecodingError(FrameError),
     // FIXME: Stupid name, try to find a better one
-    PacketDecodingError(FrameCollectionError),
+    _PacketDecodingError(FrameCollectionError),
     _EspNowFrameDecodingError(EspNowDecodingError),
     EspNowTransmissionError(EspError),
     EspNowTransmissionCallbackError(MacAddress),
@@ -59,11 +59,11 @@ impl std::fmt::Display for EspChannelError {
                     e
                 )
             }
-            EspChannelError::FrameDecodingError(e) => {
+            EspChannelError::_FrameDecodingError(e) => {
                 // FIXME: Implement Display trait for FrameError
                 write!(f, "could not decode partial packet frame: {:?}", e)
             }
-            EspChannelError::PacketDecodingError(e) => {
+            EspChannelError::_PacketDecodingError(e) => {
                 // FIXME: Implement Display trait for FrameCollectionError
                 write!(
                     f,
@@ -110,7 +110,8 @@ pub struct EspChannel {
     espnow_driver: EspNow<'static>,
     own_mac: MacAddress,
     mac_map: HashMap<NodeID, MacAddress>,
-    rx_buffer: Arc<Mutex<HashMap<u32, (SystemTime, FrameCollection)>>>,
+    rx_queue: Arc<Mutex<VecDeque<Vec<u8>>>>,
+    frame_collection_pool: HashMap<u32, (SystemTime, FrameCollection)>,
     tx_callback_done: Arc<Mutex<bool>>,
     tx_callback_result: Arc<Mutex<Result<(), EspChannelError>>>,
 }
@@ -129,7 +130,8 @@ impl EspChannel {
             espnow_driver,
             own_mac: mac,
             mac_map: HashMap::from(CONFIG.nodes),
-            rx_buffer: Arc::new(Mutex::new(HashMap::new())),
+            rx_queue: Arc::new(Mutex::new(VecDeque::new())),
+            frame_collection_pool: HashMap::new(),
             tx_callback_done: Arc::new(Mutex::new(false)),
             tx_callback_result: Arc::new(Mutex::new(Ok(()))),
         })
@@ -172,55 +174,15 @@ impl EspChannel {
     }
 
     fn register_callbacks(&mut self) -> Result<(), EspError> {
-        let rx_buffer_clone = self.rx_buffer.clone();
-        let rx_callback = move |wifi_frame: WifiFrame,
-                                pkt_type: promiscuous_wifi::PromiscuousPktType|
-              -> Result<(), Box<dyn Error>> {
-            let espnow_frame = match EspNowFrame::try_from(wifi_frame.get_data()) {
-                Ok(f) => f,
-                // NOTE: The WiFi sniffer also receives other data that is not EspNow. To not
-                // spam the debug output, we silence this warning.
-                Err(_e) => return Ok(()),
-            };
-
-            log::debug!(
-                "Received an EspNow frame {:?} with packet type {:?}",
-                espnow_frame,
-                pkt_type
-            );
-
-            let partial_frame = match Frame::try_from(espnow_frame.get_body()) {
-                Ok(f) => f,
-                Err(e) => return Err(Box::new(EspChannelError::FrameDecodingError(e))),
-            };
-
-            let mut buffer = rx_buffer_clone.lock().unwrap();
-
-            if !buffer.contains_key(&partial_frame.get_magic()) {
-                if buffer.len() >= RX_QUEUE_MAX_SIZE {
-                    log::warn!("Have to drop packet, because RX queue is full!");
-                    return Ok(());
-                }
-
-                buffer.insert(
-                    partial_frame.get_magic(),
-                    (SystemTime::now(), FrameCollection::new()),
-                );
-            }
-
-            let frame_collection = buffer.get_mut(&partial_frame.get_magic()).unwrap();
-
-            if let Err(e) = frame_collection.1.add_frame(partial_frame) {
-                return Err(Box::new(EspChannelError::PacketDecodingError(e)));
-            }
-
-            // NOTE: We reset the collection timestamp here, since a frame indicates that
-            // the packet is still in transit. If we would only set the timestamp for the
-            // first frame, we could prematurely drop large packets or packets sent during
-            // high congestion.
-            frame_collection.0 = SystemTime::now();
-
-            Ok(())
+        let rx_queue_clone = self.rx_queue.clone();
+        let rx_callback = move |bytes: &[u8]| {
+            // NOTE: As this is an ISR, it should do as little as possible. It is also
+            // possible, that ACKs are only sent out after this function returns. So we
+            // get the data out and do all parsing in the main thread.
+            // TODO: If we receive data faster than we can process in the main thread, we
+            // will quickly OOM. In this case, we need to limit the amount of items pushed
+            // to the queue and drop frames.
+            rx_queue_clone.lock().unwrap().push_back(Vec::from(bytes));
         };
 
         promiscuous_wifi::set_promiscuous_rx_callback(&mut self.wifi_driver, rx_callback)?;
@@ -284,6 +246,14 @@ impl EspChannel {
     pub fn get_mac(&self) -> MacAddress {
         self.own_mac
     }
+
+    fn parse_received_wifi_frame(&self, frame: &[u8]) -> Option<Frame> {
+        // TODO: If parsing everything is to slow, try to only parse the relevent parts
+        // (usually the body)
+        let wifi_frame: WifiFrame = frame.try_into().ok()?;
+        let espnow_frame = EspNowFrame::try_from(wifi_frame.get_data()).ok()?;
+        Frame::try_from(espnow_frame.get_body()).ok()
+    }
 }
 
 impl Channel for EspChannel {
@@ -343,7 +313,6 @@ impl Channel for EspChannel {
                 // can fail if you send too quickly.
                 while !*self.tx_callback_done.lock().unwrap() {}
                 *self.tx_callback_done.lock().unwrap() = false;
-                let tx_callback_result = self.tx_callback_result.lock().unwrap();
 
                 // FIXME: Refactor this entire error handling code, it is hard to understand and
                 // I have already found multiple bugs here.
@@ -354,6 +323,7 @@ impl Channel for EspChannel {
                     )));
                 }
 
+                let tx_callback_result = self.tx_callback_result.lock().unwrap();
                 if tx_callback_result.is_err() {
                     // TODO: There has to be a better way to do this in Rust.
                     // This is the ugliest code I have ever written.
@@ -375,11 +345,60 @@ impl Channel for EspChannel {
     }
 
     fn receive(&mut self) -> Option<Packet> {
+        // NOTE: To prevent raw frame parsing to turn into an infinite loop, we set an
+        // upper bound on the raw frames at the start. So even if more frames
+        // are received during the parsing loop, we will not attempt to process them.
+        let mut current_frames = 0;
+        let total_frames = self.rx_queue.lock().unwrap().len();
+
+        while current_frames < total_frames {
+            current_frames += 1;
+            // NOTE: It is *very* important that we do not just lock once at the start of
+            // receive(). If we did that, we would be unable to push packets to
+            // self.rx_queue in the ISR the entire time we still are in receive().
+            let raw_frame = self.rx_queue.lock().unwrap().pop_front().unwrap();
+
+            let frame = match self.parse_received_wifi_frame(raw_frame.as_slice()) {
+                Some(f) => f,
+                None => continue,
+            };
+
+            if !self.frame_collection_pool.contains_key(&frame.get_magic()) {
+                // TODO: Think about where we need to limit the queue size. When receiving many
+                // packets, we could OOM really quickly because self.rx_queue is currently
+                // unbounded. This needs to be tested in practice, I don't know the ESP
+                // performance characteristics enough to make a decision now.
+                if self.frame_collection_pool.len() >= RX_QUEUE_MAX_SIZE {
+                    log::warn!("Have to drop packet, because RX queue is full!");
+                    continue;
+                }
+
+                self.frame_collection_pool.insert(
+                    frame.get_magic(),
+                    (SystemTime::now(), FrameCollection::new()),
+                );
+            }
+
+            let entry = self
+                .frame_collection_pool
+                .get_mut(&frame.get_magic())
+                .unwrap();
+
+            if let Err(e) = entry.1.add_frame(frame) {
+                log::warn!("Could not add split frame to collection: {:?}", e);
+                continue;
+            }
+
+            // NOTE: We reset the collection timestamp here, since a frame indicates that
+            // the packet is still in transit. If we would only set the timestamp for the
+            // first frame, we could prematurely drop large packets or packets sent during
+            // high congestion.
+            entry.0 = SystemTime::now();
+        }
+
         let mut packet = None;
 
-        self.rx_buffer
-            .lock()
-            .unwrap()
+        self.frame_collection_pool
             .retain(|_, (last_frame_rx, collection)| {
                 let elapsed = match last_frame_rx.elapsed() {
                     Ok(elapsed) => elapsed,
@@ -411,12 +430,14 @@ impl Channel for EspChannel {
                 return true;
             });
 
-        // NOTE: free memory after cleaning out map
-        self.rx_buffer.lock().unwrap().shrink_to_fit();
+        // TODO: It is not really clear if this really helps with memory bloat or just
+        // increases congestion. Needs to be benchmarked.
+        self.rx_queue.lock().unwrap().shrink_to_fit();
+        self.frame_collection_pool.shrink_to_fit();
 
         log::debug!(
             "RX queue has {} packets ready for dequeing",
-            self.rx_buffer.lock().unwrap().len()
+            self.frame_collection_pool.len()
         );
 
         packet
