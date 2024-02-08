@@ -5,7 +5,7 @@ use std::time::{Duration, SystemTime};
 
 use rand_distr;
 
-use super::TGStrategy;
+use super::{size_distribution::SizeDistribution, TGStrategy};
 
 pub struct PoissonStrategy {
     // NOTE: The next timestamp at which to generate a packet
@@ -13,6 +13,8 @@ pub struct PoissonStrategy {
     // NOTE: The target network throughput in bytes
     generation_rate: f32,
     distribution: rand_distr::Poisson<f32>,
+    // NOTE: Distribution of packet sizes
+    size_distribution: SizeDistribution,
 }
 
 impl PoissonStrategy {
@@ -21,6 +23,7 @@ impl PoissonStrategy {
             generation_timestamp: SystemTime::now(),
             generation_rate: generation_rate as f32,
             distribution: rand_distr::Poisson::new(generation_rate as f32).unwrap(),
+            size_distribution: SizeDistribution::new(),
         }
     }
 }
@@ -39,12 +42,10 @@ impl TGStrategy for PoissonStrategy {
             timestamp.duration_since(self.generation_timestamp).unwrap()
         );
 
-        // NOTE: In the future, packet size could also be made random
-        // using a bimodal distribution, like it is done in the paper.
-        const PACKET_SIZE: usize = 128;
+        let target_size = self.size_distribution.sample(&mut rand::thread_rng());
         self.generation_rate = self.distribution.sample(&mut rand::thread_rng());
         self.generation_timestamp +=
-            Duration::from_secs_f32(PACKET_SIZE as f32 / self.generation_rate);
-        Some(PacketBuilder::new().with_data_size(PACKET_SIZE))
+            Duration::from_secs_f32(target_size as f32 / self.generation_rate);
+        Some(PacketBuilder::new().with_data_size(target_size))
     }
 }

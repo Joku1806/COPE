@@ -9,6 +9,7 @@ pub mod pareto_strategy;
 pub mod periodic_strategy;
 pub mod poisson_strategy;
 pub mod random_strategy;
+pub mod size_distribution;
 
 use greedy_strategy::GreedyStrategy;
 use none_strategy::NoneStrategy;
