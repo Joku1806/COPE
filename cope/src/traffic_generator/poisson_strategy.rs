@@ -29,9 +29,15 @@ impl TGStrategy for PoissonStrategy {
     fn generate(&mut self) -> Option<PacketBuilder> {
         // TODO: We should probably add a check if we are too far away from the generation timestamp.
         // This would indicate that the target generation rate is too high to be achieved by the channel.
-        if SystemTime::now() < self.generation_timestamp {
+        let timestamp = SystemTime::now();
+        if timestamp < self.generation_timestamp {
             return None;
         }
+
+        log::debug!(
+            "Overshoot by: {:?}",
+            timestamp.duration_since(self.generation_timestamp).unwrap()
+        );
 
         // NOTE: In the future, packet size could also be made random
         // using a bimodal distribution, like it is done in the paper.

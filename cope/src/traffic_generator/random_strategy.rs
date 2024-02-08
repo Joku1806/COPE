@@ -29,6 +29,11 @@ impl TGStrategy for RandomStrategy {
             return None;
         }
 
+        log::debug!(
+            "Overshoot by: {:?}",
+            timestamp.duration_since(self.generation_timestamp).unwrap()
+        );
+
         let mut rng = rand::thread_rng();
         let range = Uniform::from(MIN_TARGET_SIZE..MAX_TARGET_SIZE);
         let target_size = range.sample(&mut rng);
