@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::ops::Index;
 use std::ops::IndexMut;
 
@@ -40,6 +41,34 @@ impl Index<usize> for PacketData {
 impl IndexMut<usize> for PacketData {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.0[index]
+    }
+}
+
+impl Display for PacketData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // NOTE: Set maximum length to not spam the terminal output
+        const MAXLEN: usize = 80;
+        // NOTE: non-graphic ASCII characters are replaced by a dot
+        // (as it is commonly done in hex editors)
+        let human_readable: String = self
+            .0
+            .iter()
+            .take(MAXLEN)
+            .map(|b| {
+                let ch = *b as char;
+                if ch.is_ascii_graphic() {
+                    ch
+                } else {
+                    '.'
+                }
+            })
+            .collect();
+
+        if self.0.len() <= MAXLEN {
+            write!(f, "{}", human_readable)
+        } else {
+            write!(f, "{}<snip>", human_readable)
+        }
     }
 }
 

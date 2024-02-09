@@ -10,15 +10,17 @@ use super::PacketData;
 
 pub type PacketID = u16;
 
-#[derive(Debug)]
-pub enum PacketError {
-    InvalidSize,
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct CodingInfo {
+    pub source: NodeID,
+    pub id: PacketID,
+    pub nexthop: NodeID,
 }
 
-#[derive(Debug)]
-pub enum PacketReceiver {
-    Single(NodeID),
-    Multi,
+impl Display for CodingInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{} -> {}", self.id, self.source, self.nexthop)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -28,11 +30,21 @@ pub enum CodingHeader {
     Control(NodeID),
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
-pub struct CodingInfo {
-    pub source: NodeID,
-    pub id: PacketID,
-    pub nexthop: NodeID,
+impl Display for CodingHeader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Native(c) => write!(f, "Native<{}>", c),
+            Self::Encoded(vc) => write!(
+                f,
+                "Encoded<{}>",
+                vc.iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Self::Control(n) => write!(f, "Control<{}>", n),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -49,6 +61,21 @@ pub struct Packet {
     reception_header: Vec<ReceptionReport>,
     ack_header: Vec<Ack>,
     data: PacketData,
+}
+
+impl Display for Packet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO: Should we explicitly print all the ACKs?
+        // I think it will distract from the other info,
+        // which is IMO more important.
+        write!(
+            f,
+            "{}, {} ACKs: {}",
+            self.coding_header,
+            self.ack_header.len(),
+            self.data
+        )
+    }
 }
 
 impl Packet {

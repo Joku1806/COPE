@@ -70,7 +70,7 @@ impl Node {
         };
 
         if let Some(packet) = packet_to_send {
-            log::info!("[Node {}]: Send {:?}", self.id, packet.coding_header());
+            log::info!("[Node {}]: Send {}", self.id, packet);
             if let Err(e) = self.channel.transmit(&packet) {
                 log::error!("{:?}", e);
             } else {
@@ -89,7 +89,7 @@ impl Node {
                 return;
             }
 
-            log::info!("[Node {}]: Received {:?}", self.id, &packet.coding_header());
+            log::info!("[Node {}]: Received {}", self.id, packet);
 
             match self.coding.handle_rx(&packet, &self.topology) {
                 Ok(Some(data)) => {
