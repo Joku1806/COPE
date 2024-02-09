@@ -3,6 +3,7 @@ use cope_config::types::{node_id::NodeID, traffic_generator_type::TrafficGenerat
 use super::packet::PacketBuilder;
 use crate::packet::{CodingInfo, PacketID};
 
+pub mod data_generator;
 pub mod greedy_strategy;
 pub mod none_strategy;
 pub mod pareto_strategy;

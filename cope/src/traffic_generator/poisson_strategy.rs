@@ -5,7 +5,7 @@ use std::time::{Duration, SystemTime};
 
 use rand_distr;
 
-use super::{size_distribution::SizeDistribution, TGStrategy};
+use super::{data_generator::DataGenerator, size_distribution::SizeDistribution, TGStrategy};
 
 pub struct PoissonStrategy {
     // NOTE: The next timestamp at which to generate a packet
@@ -15,6 +15,7 @@ pub struct PoissonStrategy {
     distribution: rand_distr::Poisson<f32>,
     // NOTE: Distribution of packet sizes
     size_distribution: SizeDistribution,
+    data_generator: DataGenerator,
 }
 
 impl PoissonStrategy {
@@ -24,6 +25,7 @@ impl PoissonStrategy {
             generation_rate: generation_rate as f32,
             distribution: rand_distr::Poisson::new(generation_rate as f32).unwrap(),
             size_distribution: SizeDistribution::new(),
+            data_generator: DataGenerator::new(),
         }
     }
 }
@@ -46,6 +48,6 @@ impl TGStrategy for PoissonStrategy {
         self.generation_rate = self.distribution.sample(&mut rand::thread_rng());
         self.generation_timestamp +=
             Duration::from_secs_f32(target_size as f32 / self.generation_rate);
-        Some(PacketBuilder::new().with_data_size(target_size))
+        Some(PacketBuilder::new().data_raw(self.data_generator.generate(target_size)))
     }
 }
