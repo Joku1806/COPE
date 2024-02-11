@@ -60,7 +60,7 @@ impl Node {
     }
 
     pub fn set_bench_log_path(&mut self, path: &String) {
-        self.bench.set_bench_log_path(path);
+        self.bench.bench_log_path(path);
     }
 
     pub fn tick(&mut self) {
@@ -70,7 +70,7 @@ impl Node {
     }
 
     fn transmit(&mut self) {
-        self.bench.reset();
+        self.bench.record("Transmit handle_tx");
         let packet_to_send = match self.coding.handle_tx(&self.topology) {
             Ok(opt) => opt,
             Err(e) => {
@@ -78,8 +78,8 @@ impl Node {
                 return;
             }
         };
-        self.bench.snapshot("Transmit handle_tx");
-        self.bench.reset();
+        self.bench.stop("Transmit handle_tx");
+        self.bench.record("Transmit Channel");
 
         if let Some(packet) = packet_to_send {
             log::info!("[Node {}]: Send {:?}", self.id, packet.coding_header());
@@ -92,20 +92,20 @@ impl Node {
             self.coding.update_last_packet_send();
             //TODO: handle error
         }
-        self.bench.snapshot("Transmit Channel")
+        self.bench.stop("Transmit Channel")
     }
 
     fn receive(&mut self) {
         // receive
-        self.bench.reset();
+        self.bench.record("Receive Channel");
         if let Some(packet) = self.channel.receive() {
-            self.bench.snapshot("Receive Channel");
+            self.bench.stop("Receive Channel");
             if !self.topology.can_receive_from(packet.sender()) {
                 return;
             }
 
             log::info!("[Node {}]: Received {:?}", self.id, &packet.coding_header());
-            self.bench.reset();
+            self.bench.record("Receive handle_rx");
 
             match self.coding.handle_rx(&packet, &self.topology) {
                 Ok(Some(data)) => {
@@ -129,7 +129,7 @@ impl Node {
                 }
                 _ => (),
             };
-            self.bench.snapshot("Receive handle_rx");
+            self.bench.stop("Receive handle_rx");
         }
     }
 }
