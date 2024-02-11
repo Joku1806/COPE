@@ -1,4 +1,3 @@
-use crate::{benchmark::BenchTimer, channel::Channel};
 use crate::coding::leaf_node_coding::LeafNodeCoding;
 use crate::coding::relay_node_coding::RelayNodeCoding;
 use crate::coding::CodingStrategy;
@@ -6,6 +5,7 @@ use crate::config::CONFIG;
 use crate::stats::Stats;
 use crate::topology::Topology;
 use crate::traffic_generator::TrafficGenerator;
+use crate::{benchmark::BenchTimer, channel::Channel};
 use cope_config::types::node_id::NodeID;
 use std::fs::File;
 use std::path::Path;
@@ -82,7 +82,7 @@ impl Node {
         self.bench.record("Transmit Channel");
 
         if let Some(packet) = packet_to_send {
-            log::info!("[Node {}]: Send {:?}", self.id, packet.coding_header());
+            log::info!("[Node {}]: Send {}", self.id, packet);
             if let Err(e) = self.channel.transmit(&packet) {
                 log::error!("{:?}", e);
             } else {
@@ -104,7 +104,7 @@ impl Node {
                 return;
             }
 
-            log::info!("[Node {}]: Received {:?}", self.id, &packet.coding_header());
+            log::info!("[Node {}]: Received {}", self.id, packet);
             self.bench.record("Receive handle_rx");
 
             match self.coding.handle_rx(&packet, &self.topology) {

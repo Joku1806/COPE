@@ -137,7 +137,7 @@ impl CodingStrategy for RelayNodeCoding {
             let acks = packet.ack_header();
             for ack in acks {
                 for info in ack.packets() {
-                    log::info!("[Relay {}]: Packet {:?} was acked.", topology.id(), info);
+                    log::info!("[Relay {}]: Packet {} was acked.", topology.id(), info);
                     self.retrans_queue.remove_packet(info);
                 }
                 self.acks.push(ack.clone());
@@ -154,7 +154,7 @@ impl CodingStrategy for RelayNodeCoding {
         let acks = packet.ack_header();
         for ack in acks {
             for info in ack.packets() {
-                log::info!("[Relay {}]: Packet {:?} was acked.", topology.id(), info);
+                log::info!("[Relay {}]: Packet {} was acked.", topology.id(), info);
                 self.retrans_queue.remove_packet(info);
             }
             self.acks.push(ack.clone());

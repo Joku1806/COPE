@@ -26,7 +26,7 @@ pub fn ids_for_decoding<PP: PacketPool>(
 
         let Some(index) = pool.position(&info) else {
             return Err(CodingError::DecodeError(format!(
-                "Packet with info {:?} is needed but was not found",
+                "Packet with info {} is needed but was not found",
                 &info
             )));
         };

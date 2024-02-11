@@ -1,3 +1,5 @@
+use super::data_generator::DataGenerator;
+use super::size_distribution::SizeDistribution;
 use super::PacketBuilder;
 use super::TGStrategy;
 
@@ -9,6 +11,9 @@ pub struct PeriodicStrategy {
     // NOTE: The last timestamp at which a packet was generated
     generation_timestamp: SystemTime,
     wait_duration: std::time::Duration,
+    // NOTE: Distribution of packet sizes
+    size_distribution: SizeDistribution,
+    data_generator: DataGenerator,
 }
 
 impl PeriodicStrategy {
@@ -16,6 +21,8 @@ impl PeriodicStrategy {
         PeriodicStrategy {
             generation_timestamp: SystemTime::now(),
             wait_duration,
+            size_distribution: SizeDistribution::new(),
+            data_generator: DataGenerator::new(),
         }
     }
 }
@@ -28,7 +35,7 @@ impl TGStrategy for PeriodicStrategy {
         }
 
         self.generation_timestamp = SystemTime::now();
-        const PACKET_SIZE: usize = 128;
-        Some(PacketBuilder::new().with_data_size(PACKET_SIZE))
+        let target_size = self.size_distribution.sample(&mut rand::thread_rng());
+        Some(PacketBuilder::new().data_raw(self.data_generator.generate(target_size)))
     }
 }
