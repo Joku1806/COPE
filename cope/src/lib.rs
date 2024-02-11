@@ -8,6 +8,7 @@ pub mod packet_pool;
 pub mod stats;
 pub mod topology;
 pub mod traffic_generator;
+pub mod benchmark;
 
 pub use node::Node;
 pub use packet::Packet;
