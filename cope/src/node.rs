@@ -7,7 +7,11 @@ use crate::stats::Stats;
 use crate::topology::Topology;
 use crate::traffic_generator::TrafficGenerator;
 use cope_config::types::node_id::NodeID;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 pub struct Node {
     id: NodeID,
@@ -15,6 +19,7 @@ pub struct Node {
     channel: Box<dyn Channel + Send>,
     coding: Box<dyn CodingStrategy + Send>,
     stats: Arc<Mutex<Stats>>,
+    bench: BenchTimer,
 }
 
 impl Node {
@@ -52,15 +57,18 @@ impl Node {
             channel,
             coding,
             stats: Arc::clone(stats),
+            bench: BenchTimer::new(),
         }
     }
 
     pub fn tick(&mut self) {
         self.receive();
         self.transmit();
+        self.bench.log(self.id);
     }
 
     fn transmit(&mut self) {
+        self.bench.reset();
         let packet_to_send = match self.coding.handle_tx(&self.topology) {
             Ok(opt) => opt,
             Err(e) => {
@@ -68,6 +76,8 @@ impl Node {
                 return;
             }
         };
+        self.bench.snapshot("Transmit handle_tx");
+        self.bench.reset();
 
         if let Some(packet) = packet_to_send {
             log::info!("[Node {}]: Send {:?}", self.id, packet.coding_header());
@@ -80,16 +90,20 @@ impl Node {
             self.coding.update_last_packet_send();
             //TODO: handle error
         }
+        self.bench.snapshot("Transmit Channel")
     }
 
     fn receive(&mut self) {
         // receive
+        self.bench.reset();
         if let Some(packet) = self.channel.receive() {
+            self.bench.snapshot("Receive Channel");
             if !self.topology.can_receive_from(packet.sender()) {
                 return;
             }
 
             log::info!("[Node {}]: Received {:?}", self.id, &packet.coding_header());
+            self.bench.reset();
 
             match self.coding.handle_rx(&packet, &self.topology) {
                 Ok(Some(data)) => {
@@ -113,6 +127,54 @@ impl Node {
                 }
                 _ => (),
             };
+            self.bench.snapshot("Receive handle_rx");
+        }
+    }
+}
+
+pub struct Snapshot {
+    pub duration: Duration,
+    pub mesurement_count: u32,
+}
+
+impl Snapshot {
+    fn avg(&self) -> Duration {
+        self.duration / self.mesurement_count
+    }
+}
+
+pub struct BenchTimer {
+    timer: Instant,
+    snapshots: HashMap<&'static str, Snapshot>,
+}
+
+impl BenchTimer {
+    pub fn new() -> Self {
+        Self {
+            timer: Instant::now(),
+            snapshots: HashMap::new(),
+        }
+    }
+    pub fn reset(&mut self) {
+        self.timer = Instant::now();
+    }
+    pub fn snapshot(&mut self, name: &'static str) {
+        let time_elap = self.timer.elapsed();
+        if let Some(snap) = self.snapshots.get_mut(name) {
+            snap.mesurement_count+=1;
+            snap.duration += time_elap;
+            return;
+        }
+        let snap = Snapshot {
+            duration: time_elap,
+            mesurement_count: 1,
+        };
+        self.snapshots.insert(name, snap);
+    }
+
+    pub fn log(&self, id: NodeID) {
+        for (name, snap) in &self.snapshots {
+            log::debug!("[Node {}][Benchmark]: {}: {:?}", id, name, snap.avg());
         }
     }
 }
