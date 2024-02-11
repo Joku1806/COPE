@@ -28,7 +28,7 @@ class DataReader:
         df = pd.read_csv(path, converters={"traffic_generator": str})
 
         cols = df.columns.difference(
-            ["time_us", "node_id", "target_id", "traffic_generator"]
+            ["time_us", "node_id", "own_mac", "target_id", "traffic_generator"]
         )
         df.loc[:, cols] = df.loc[:, cols].apply(
             DataReader.undo_wraparounds, axis="index"
