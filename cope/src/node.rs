@@ -7,6 +7,8 @@ use crate::stats::Stats;
 use crate::topology::Topology;
 use crate::traffic_generator::TrafficGenerator;
 use cope_config::types::node_id::NodeID;
+use std::fs::File;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 pub struct Node {
@@ -55,6 +57,10 @@ impl Node {
             stats: Arc::clone(stats),
             bench: BenchTimer::new(),
         }
+    }
+
+    pub fn set_bench_log_path(&mut self, path: &String) {
+        self.bench.set_bench_log_path(path);
     }
 
     pub fn tick(&mut self) {

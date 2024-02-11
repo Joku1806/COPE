@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::path::Path;
 use std::sync::mpsc::channel;
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
@@ -33,6 +35,8 @@ fn main() -> anyhow::Result<()> {
             Box::new(SimulatorChannel::new(node_rx, tx.clone())),
             &stats,
         );
+        let bench_path = format!("./log/bench/log_{}",id);
+        node.set_bench_log_path(&bench_path);
 
         std::thread::spawn(move || loop {
             node.tick();
