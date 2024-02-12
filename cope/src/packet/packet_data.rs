@@ -21,9 +21,12 @@ impl PacketData {
     }
 
     pub fn xor(mut self, rhs: &PacketData) -> Self {
+        self = self.right_pad(rhs.0.len(), 0);
+
         for i in 0..usize::min(rhs.0.len(), self.0.len()) {
             self[i] = self[i] ^ rhs[i];
         }
+
         self
     }
 

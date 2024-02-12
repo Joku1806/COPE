@@ -121,7 +121,7 @@ fn encode(packets: &Vec<(CodingInfo, PacketData)>) -> (Vec<CodingInfo>, PacketDa
         .iter()
         .cloned()
         .map(|p| p.1)
-        .fold(packets[0].1.clone(), |acc, x| acc.xor(&x));
+        .fold(PacketData::new(vec![]), |acc, x| acc.xor(&x));
     (info, data)
 }
 
