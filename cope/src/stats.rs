@@ -73,8 +73,10 @@ impl Stats {
             cache_misses: Wrapping(0),
         };
 
-        let header = stats.file_header();
-        stats.logger.log(&header);
+        if CONFIG.log_node_stats {
+            let header = stats.file_header();
+            stats.logger.log(&header);
+        }
 
         stats
     }

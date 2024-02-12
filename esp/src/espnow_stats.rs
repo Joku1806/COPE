@@ -32,8 +32,10 @@ impl EspNowStats {
             tx_failures: Wrapping(0),
         };
 
-        let header = stats.file_header();
-        stats.logger.log(&header);
+        if CONFIG.log_espnow_stats {
+            let header = stats.file_header();
+            stats.logger.log(&header);
+        }
 
         stats
     }
