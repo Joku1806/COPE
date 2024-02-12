@@ -1,5 +1,5 @@
 use crate::esp_stats_logger::EspStatsLogger;
-use crate::espnow_frame::{EspNowDecodingError, EspNowFrame};
+use crate::espnow_frame::{EspNowDecodingError, EspNowFrame, ESPNOW_HEADER_SIZE};
 use crate::espnow_stats::EspNowStats;
 use crate::frame_collection::{Frame, FrameCollection, FrameCollectionError, FrameError};
 use crate::promiscuous_wifi;
@@ -326,7 +326,8 @@ impl Channel for EspChannel {
                     return copy;
                 }
 
-                self.stats.add_sent(frame_serialized.len());
+                self.stats
+                    .add_sent(frame_serialized.len() + ESPNOW_HEADER_SIZE);
                 self.stats.log_data();
             }
         }

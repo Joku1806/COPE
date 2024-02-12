@@ -41,11 +41,13 @@ pub enum EspNowDecodingError {
     InvalidVendorContentType,
 }
 
+pub const ESPNOW_HEADER_SIZE: usize = 39;
+
 impl TryFrom<&[u8]> for EspNowFrame {
     type Error = EspNowDecodingError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        if bytes.len() < 39 {
+        if bytes.len() < ESPNOW_HEADER_SIZE {
             return Err(Self::Error::InvalidLength);
         }
 
@@ -119,7 +121,7 @@ impl TryFrom<&[u8]> for EspNowFrame {
         }
 
         decoded.vendor_content.version = bytes[38];
-        let vc_start = 39 as usize;
+        let vc_start = ESPNOW_HEADER_SIZE;
         let vc_stop = vc_start + decoded.vendor_content.length as usize - 5;
         decoded.vendor_content.body = Vec::from(&bytes[vc_start..vc_stop]);
 
