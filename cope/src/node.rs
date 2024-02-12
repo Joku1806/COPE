@@ -82,7 +82,7 @@ impl Node {
         self.bench.record("Transmit Channel");
 
         if let Some(packet) = packet_to_send {
-            log::info!("[Node {}]: Send {}", self.id, packet);
+            log::debug!("[Node {}]: Send {}", self.id, packet);
             if let Err(e) = self.channel.transmit(&packet) {
                 log::error!("{:?}", e);
             } else {
@@ -109,6 +109,7 @@ impl Node {
 
             match self.coding.handle_rx(&packet, &self.topology) {
                 Ok(Some(data)) => {
+                    log::info!("[Node {}]: Decoded data {}", self.id, data);
                     self.stats.lock().unwrap().add_received(
                         packet.sender(),
                         packet.coding_header(),

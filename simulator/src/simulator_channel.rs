@@ -35,7 +35,7 @@ impl StatsLogger for SimulatorStatsLogger {
     }
 
     fn log(&mut self, data: &str) {
-        log::info!("Logging {} to {:?}", data, self.line_buffer);
+        log::debug!("Logging {} to {:?}", data, self.line_buffer);
 
         if let Err(e) = writeln!(self.line_buffer, "{}", data) {
             log::warn!("Could not log or flush data: {}", e);

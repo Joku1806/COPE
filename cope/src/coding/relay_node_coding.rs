@@ -109,7 +109,7 @@ impl RelayNodeCoding {
             .ack_header(std::mem::take(&mut self.acks))
             .build()
             .unwrap();
-        log::info!("[Relay {}]: {:?}", topo.id(), coded_packet.ack_header());
+        log::debug!("[Relay {}]: {:?}", topo.id(), coded_packet.ack_header());
 
         Ok(coded_packet)
     }
@@ -137,7 +137,7 @@ impl CodingStrategy for RelayNodeCoding {
             let acks = packet.ack_header();
             for ack in acks {
                 for info in ack.packets() {
-                    log::info!("[Relay {}]: Packet {} was acked.", topology.id(), info);
+                    log::debug!("[Relay {}]: Packet {} was acked.", topology.id(), info);
                     self.retrans_queue.remove_packet(info);
                 }
                 self.acks.push(ack.clone());
@@ -154,7 +154,7 @@ impl CodingStrategy for RelayNodeCoding {
         let acks = packet.ack_header();
         for ack in acks {
             for info in ack.packets() {
-                log::info!("[Relay {}]: Packet {} was acked.", topology.id(), info);
+                log::debug!("[Relay {}]: Packet {} was acked.", topology.id(), info);
                 self.retrans_queue.remove_packet(info);
             }
             self.acks.push(ack.clone());
@@ -163,7 +163,7 @@ impl CodingStrategy for RelayNodeCoding {
         self.kbase.insert(packet.sender(), coding_info.clone());
         // add to packet pool
         self.packet_pool.push_packet(packet.clone());
-        log::info!(
+        log::debug!(
             "[Relay {}]: Has stored {} packages and knows about {}",
             topology.id(),
             self.packet_pool.size(),
@@ -194,7 +194,7 @@ impl CodingStrategy for RelayNodeCoding {
                     .control_header(receiver)
                     .ack_header(std::mem::take(&mut self.acks))
                     .build();
-                log::info!("[Relay {}]: Send Control Packet", topology.id());
+                log::debug!("[Relay {}]: Send Control Packet", topology.id());
                 match result {
                     Ok(control_packet) => return Ok(Some(control_packet)),
                     Err(e) => {

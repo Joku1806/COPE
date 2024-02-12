@@ -62,12 +62,12 @@ impl CodingStrategy for LeafNodeCoding {
         let acks = packet.ack_header();
         for ack in acks {
             for info in ack.packets() {
-                log::info!("[Node {}]: Packet {} was acked.", topology.id(), info);
+                log::debug!("[Node {}]: Packet {} was acked.", topology.id(), info);
                 self.retrans_queue.remove_packet(info);
             }
         }
 
-        log::info!(
+        log::debug!(
             "[Node{}]: Retrans Queue Size {}",
             topology.id(),
             self.retrans_queue.len()
@@ -84,14 +84,14 @@ impl CodingStrategy for LeafNodeCoding {
             CodingHeader::Encoded(coding_info) => {
                 // check if node is next_hop for packet
                 if !is_next_hop(topology.id(), coding_info) {
-                    log::info!("[Node {}]: Not a next hop of Packet.", topology.id());
+                    log::debug!("[Node {}]: Not a next hop of Packet.", topology.id());
                     return Ok(Some(original_data));
                 }
                 // decode
                 // TODO: add acks to the thing
                 let (ids, info) = ids_for_decoding(topology.id(), coding_info, &self.packet_pool)?;
                 let decoded_data = decode(&ids, packet.data(), &self.packet_pool);
-                log::info!("[Node {}]: Decoded into {}", topology.id(), decoded_data);
+                log::debug!("[Node {}]: Decoded into {}", topology.id(), decoded_data);
                 remove_from_pool(&mut self.packet_pool, &ids);
                 self.acks.push(info);
                 return Ok(Some(decoded_data));
@@ -147,7 +147,7 @@ impl CodingStrategy for LeafNodeCoding {
                 .control_header(receiver)
                 .ack_header(vec![ack])
                 .build();
-            log::info!("[Relay {}]: Send Control Packet", topology.id());
+            log::debug!("[Relay {}]: Send Control Packet", topology.id());
             match result {
                 Ok(control_packet) => return Ok(Some(control_packet)),
                 Err(e) => {
