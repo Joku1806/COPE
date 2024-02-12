@@ -1,10 +1,12 @@
 use rand::Rng;
 use std::cmp::min;
 
-const SAMPLES: [&str; 3] = [
+const SAMPLES: [&str; 5] = [
     "Lorem ipsum dolor sit amet, consectetur adipisici elit, sed eiusmod tempor incidunt ut labore et dolore magna aliqua.",
     "Die Galaktische Republik wird von Unruhen erschüttert. Die Besteuerung der Handelsrouten zu weit entfernten Sternensystemen ist der Auslöser.",
     "If life seems jolly rotten There's something you've forgotten And that's to laugh and smile and dance and sing",
+    "Never gonna give you up Never gonna let you down Never gonna run around and desert you Never gonna make you cry Never gonna say goodbye",
+    "It is an ancient Mariner, And he stoppeth one of three. 'By thy long grey beard and glittering eye, Now wherefore stopp'st thou me?"
 ];
 
 pub struct DataGenerator {}
