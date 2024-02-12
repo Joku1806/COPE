@@ -2,6 +2,7 @@
 #![test_runner(test_runner::run)]
 
 mod esp_channel;
+mod esp_stats_logger;
 mod espnow_frame;
 mod espnow_stats;
 mod frame_collection;
@@ -9,13 +10,11 @@ mod promiscuous_wifi;
 mod test_runner;
 mod wifi_frame;
 
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use cope::config::CONFIG;
-use cope::stats::{Stats, StatsLogger};
+use cope::stats::Stats;
 use cope::Node;
-use esp_channel::EspStatsLogger;
+use cope::{config::CONFIG, stats::StatsLogger};
 use simple_logger::SimpleLogger;
 
 use enumset::enum_set;
@@ -25,7 +24,7 @@ use esp_idf_svc::hal::{
     task::watchdog::{TWDTConfig, TWDTDriver},
 };
 
-use crate::esp_channel::EspChannel;
+use crate::{esp_channel::EspChannel, esp_stats_logger::EspStatsLogger};
 
 fn main() -> anyhow::Result<()> {
     esp_idf_svc::sys::link_patches();
@@ -57,12 +56,8 @@ fn main() -> anyhow::Result<()> {
         .expect("Config should contain Node MAC addresses");
 
     let logger = EspStatsLogger::new(format!("./log/esp/log_{}", id.unwrap()).as_str()).unwrap();
-    let stats = Arc::new(Mutex::new(Stats::new(
-        id,
-        Box::new(logger),
-        CONFIG.stats_log_duration,
-    )));
-    let mut node = Node::new(id, Box::new(esp_channel), &stats);
+    let stats = Stats::new(id, Box::new(logger), CONFIG.stats_log_duration);
+    let mut node = Node::new(id, Box::new(esp_channel), stats);
 
     loop {
         node.tick();

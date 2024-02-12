@@ -1,3 +1,4 @@
+use crate::esp_stats_logger::EspStatsLogger;
 use crate::espnow_frame::{EspNowDecodingError, EspNowFrame};
 use crate::espnow_stats::EspNowStats;
 use crate::frame_collection::{Frame, FrameCollection, FrameCollectionError, FrameError};
@@ -87,22 +88,6 @@ impl std::fmt::Display for EspChannelError {
 }
 
 impl Error for EspChannelError {}
-
-pub struct EspStatsLogger {
-    path: String,
-}
-
-impl StatsLogger for EspStatsLogger {
-    fn new(path: &str) -> Result<Self, std::io::Error> {
-        Ok(Self {
-            path: path.to_owned(),
-        })
-    }
-
-    fn log(&mut self, data: &str) {
-        println!("STATS {} {}", self.path, data);
-    }
-}
 
 pub struct EspChannel {
     // NOTE: We do not access the WiFi Driver after initialize(), but we need to keep it around so
