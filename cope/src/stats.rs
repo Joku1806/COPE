@@ -16,6 +16,8 @@ pub trait StatsLogger {
 pub struct Stats {
     logger: Box<dyn StatsLogger + Send>,
     creation_time: std::time::Instant,
+    last_log: std::time::Instant,
+    log_frequency: std::time::Duration,
     own_id: NodeID,
     // FIXME: Concept breaks down for coded_sent, since there are multiple receivers
     // and you have to narrow that down to the canonical receiver.
@@ -38,7 +40,11 @@ pub struct Stats {
 }
 
 impl Stats {
-    pub fn new(node_id: NodeID, logger: Box<dyn StatsLogger + Send>) -> Self {
+    pub fn new(
+        node_id: NodeID,
+        logger: Box<dyn StatsLogger + Send>,
+        log_frequency: std::time::Duration,
+    ) -> Self {
         let tg = CONFIG
             .get_generator_type_for(node_id)
             .expect("Config should contain traffic generator type");
@@ -47,6 +53,8 @@ impl Stats {
             logger,
             // TODO: Use Instant or SystemTime?
             creation_time: std::time::Instant::now(),
+            last_log: std::time::Instant::now(),
+            log_frequency,
             own_id: node_id,
             target_id: node_id,
             traffic_generator: tg,
@@ -76,6 +84,12 @@ impl Stats {
     }
 
     pub fn log_data(&mut self) {
+        if self.last_log.elapsed() < self.log_frequency || !CONFIG.log_node_stats {
+            return;
+        }
+
+        self.last_log = std::time::Instant::now();
+
         let formatted = format!(
             "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
             self.creation_time.elapsed().as_micros(),

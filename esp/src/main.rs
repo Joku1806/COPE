@@ -57,7 +57,11 @@ fn main() -> anyhow::Result<()> {
         .expect("Config should contain Node MAC addresses");
 
     let logger = EspStatsLogger::new(format!("./log/esp/log_{}", id.unwrap()).as_str()).unwrap();
-    let stats = Arc::new(Mutex::new(Stats::new(id, Box::new(logger))));
+    let stats = Arc::new(Mutex::new(Stats::new(
+        id,
+        Box::new(logger),
+        CONFIG.stats_log_duration,
+    )));
     let mut node = Node::new(id, Box::new(esp_channel), &stats);
 
     loop {

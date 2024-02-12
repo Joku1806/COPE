@@ -12,6 +12,9 @@ pub const CONFIG: Config<3> = Config{
     max_retrans_amount: 2,
     use_coding: true,
     packet_pool_size: 8,
+    stats_log_duration: Duration::new(1, 0),
+    log_node_stats: true,
+    log_espnow_stats: true,
     nodes: [
         (NodeID::new('A'), MacAddress::new(52, 133, 24, 185, 27, 156)),
         (NodeID::new('B'), MacAddress::new(52, 133, 24, 185, 26, 212)),

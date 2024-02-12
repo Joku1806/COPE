@@ -137,7 +137,7 @@ impl EspChannel {
             frame_collection_pool: HashMap::new(),
             tx_callback_done: Arc::new(Mutex::new(false)),
             tx_callback_result: Arc::new(Mutex::new(Ok(()))),
-            stats: EspNowStats::new(mac, Box::new(logger)),
+            stats: EspNowStats::new(mac, Box::new(logger), CONFIG.stats_log_duration),
         })
     }
 

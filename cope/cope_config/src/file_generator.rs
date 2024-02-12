@@ -59,6 +59,16 @@ pub fn generate(config: &TmpConfig, path: &String) {
 
     writeln!(file, "    use_coding: {},", config.use_coding).unwrap();
     writeln!(file, "    packet_pool_size: {},", config.packet_pool_size).unwrap();
+    writeln!(
+        file,
+        "    stats_log_duration: Duration::new({}, {}),",
+        config.stats_log_duration.as_secs(),
+        config.stats_log_duration.subsec_nanos()
+    )
+    .unwrap();
+    writeln!(file, "    log_node_stats: {},", config.log_node_stats).unwrap();
+    writeln!(file, "    log_espnow_stats: {},", config.log_espnow_stats).unwrap();
+
     write_nodes(&mut file, config);
     write_relay(&mut file, config);
     write_whitelist(&mut file, config, node_count, "rx_whitelist");

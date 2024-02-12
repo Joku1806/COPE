@@ -27,7 +27,11 @@ fn main() -> anyhow::Result<()> {
         let logger =
             SimulatorStatsLogger::new(format!("./log/simulator/log_{}", id.unwrap()).as_str())
                 .unwrap();
-        let stats = Arc::new(Mutex::new(Stats::new(*id, Box::new(logger))));
+        let stats = Arc::new(Mutex::new(Stats::new(
+            *id,
+            Box::new(logger),
+            CONFIG.stats_log_duration,
+        )));
         let mut node = Node::new(
             *id,
             Box::new(SimulatorChannel::new(node_rx, tx.clone())),
