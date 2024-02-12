@@ -15,6 +15,8 @@ pub struct CodingInfo {
     pub source: NodeID,
     pub id: PacketID,
     pub nexthop: NodeID,
+    // FIXME: Needs to include native packet length,
+    // so we can remove zero padding after decoding.
 }
 
 impl Display for CodingInfo {
