@@ -20,6 +20,9 @@ pub struct TmpConfig {
     pub control_packet_duration: Duration,
     pub max_retrans_amount: u8,
     pub use_coding: bool,
+    pub stats_log_duration: Duration,
+    pub log_node_stats: bool,
+    pub log_espnow_stats: bool,
 }
 
 impl TmpConfig {
@@ -35,6 +38,9 @@ impl TmpConfig {
         control_packet_duration: Duration,
         max_retrans_amount: u8,
         use_coding: bool,
+        stats_log_duration: Duration,
+        log_node_stats: bool,
+        log_espnow_stats: bool,
     ) -> Self {
         Self {
             node_count: nodes.len(),
@@ -49,6 +55,9 @@ impl TmpConfig {
             control_packet_duration,
             max_retrans_amount,
             use_coding,
+            stats_log_duration,
+            log_node_stats,
+            log_espnow_stats,
         }
     }
 
@@ -92,6 +101,9 @@ pub struct Config<const N: usize> {
     pub packet_pool_size: usize,
     pub max_retrans_amount: u8,
     pub use_coding: bool,
+    pub stats_log_duration: Duration,
+    pub log_node_stats: bool,
+    pub log_espnow_stats: bool,
 }
 
 impl<const N: usize> CopeConfig for Config<N> {}

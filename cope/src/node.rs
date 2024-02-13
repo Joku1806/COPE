@@ -7,17 +7,14 @@ use crate::topology::Topology;
 use crate::traffic_generator::TrafficGenerator;
 use crate::{benchmark::BenchTimer, channel::Channel};
 use cope_config::types::node_id::NodeID;
-use std::fs::File;
-use std::path::Path;
-use std::sync::{Arc, Mutex};
 
 pub struct Node {
     id: NodeID,
     topology: Topology,
     channel: Box<dyn Channel + Send>,
     coding: Box<dyn CodingStrategy + Send>,
-    stats: Arc<Mutex<Stats>>,
     bench: BenchTimer,
+    stats: Stats,
 }
 
 impl Node {
@@ -25,7 +22,7 @@ impl Node {
         id: NodeID,
         // NOTE: Send is required for sharing between threads in simulator
         channel: Box<dyn Channel + Send>,
-        stats: &Arc<Mutex<Stats>>,
+        stats: Stats,
     ) -> Self {
         let rx_whitelist = CONFIG
             .get_rx_whitelist_for(id)
@@ -54,8 +51,8 @@ impl Node {
             topology,
             channel,
             coding,
-            stats: Arc::clone(stats),
             bench: BenchTimer::new(),
+            stats,
         }
     }
 
@@ -86,8 +83,8 @@ impl Node {
             if let Err(e) = self.channel.transmit(&packet) {
                 log::error!("{:?}", e);
             } else {
-                self.stats.lock().unwrap().add_sent(&packet);
-                self.stats.lock().unwrap().log_data();
+                self.stats.add_sent(&packet);
+                self.stats.log_data();
             }
             self.coding.update_last_packet_send();
             //TODO: handle error
@@ -112,23 +109,23 @@ impl Node {
                     if data.len() != 0 {
                         log::info!("[Node {}]: Decoded data {}", self.id, data);
                     }
-                    self.stats.lock().unwrap().add_received(
+                    self.stats.add_received(
                         packet.sender(),
                         packet.coding_header(),
                         data.len() as u32,
                         true,
                     );
-                    self.stats.lock().unwrap().log_data();
+                    self.stats.log_data();
                 }
                 Err(e) => {
                     log::error!("{}", e);
-                    self.stats.lock().unwrap().add_received(
+                    self.stats.add_received(
                         packet.sender(),
                         packet.coding_header(),
                         packet.data().len() as u32,
                         false,
                     );
-                    self.stats.lock().unwrap().log_data();
+                    self.stats.log_data();
                 }
                 _ => (),
             };

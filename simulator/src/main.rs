@@ -1,16 +1,15 @@
-use std::fs::File;
-use std::path::Path;
+use std::collections::HashMap;
 use std::sync::mpsc::channel;
-use std::sync::Mutex;
-use std::{collections::HashMap, sync::Arc};
 
 use cope::config::CONFIG;
 use cope::stats::{Stats, StatsLogger};
 use cope::Node;
 use simple_logger::SimpleLogger;
-use simulator_channel::{SimulatorChannel, SimulatorStatsLogger};
+use simulator_channel::SimulatorChannel;
+use simulator_stats_logger::SimulatorStatsLogger;
 
 mod simulator_channel;
+mod simulator_stats_logger;
 
 fn main() -> anyhow::Result<()> {
     SimpleLogger::new()
@@ -29,13 +28,14 @@ fn main() -> anyhow::Result<()> {
         let logger =
             SimulatorStatsLogger::new(format!("./log/simulator/log_{}", id.unwrap()).as_str())
                 .unwrap();
-        let stats = Arc::new(Mutex::new(Stats::new(*id, Box::new(logger))));
+        let stats = Stats::new(*id, Box::new(logger), CONFIG.stats_log_duration);
+
         let mut node = Node::new(
             *id,
             Box::new(SimulatorChannel::new(node_rx, tx.clone())),
-            &stats,
+            stats,
         );
-        let bench_path = format!("./log/bench/log_{}",id);
+        let bench_path = format!("./log/bench/log_{}", id);
         node.set_bench_log_path(&bench_path);
 
         std::thread::spawn(move || loop {

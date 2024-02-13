@@ -76,6 +76,36 @@ class Plotter:
 
         self.post_function(f"rx_throughput_over_time_{self.label}")
 
+    def plot_rx_sniff_throughput_over_time(self):
+        fig, ax = plt.subplots()
+
+        df = self.df[["time_us", "data_sniffed"]]
+        # TODO: Check if we want origin="start" or not
+        df_sec = df.rolling("1s", on="time_us").sum()
+
+        ax.plot(df_sec["time_us"], df_sec["data_sniffed"])
+
+        ax.xaxis.set_major_formatter(Plotter.timedelta_seconds_formatter())
+        ax.set_xlabel("Time [s]")
+        ax.set_ylabel("RX Throughput [B]")
+
+        self.post_function(f"rx_sniff_throughput_over_time_{self.label}")
+
+    def plot_tx_throughput_over_time(self):
+        fig, ax = plt.subplots()
+
+        df = self.df[["time_us", "data_sent"]]
+        # TODO: Check if we want origin="start" or not
+        df_sec = df.rolling("1s", on="time_us").sum()
+
+        ax.plot(df_sec["time_us"], df_sec["data_sent"])
+
+        ax.xaxis.set_major_formatter(Plotter.timedelta_seconds_formatter())
+        ax.set_xlabel("Time [s]")
+        ax.set_ylabel("TX Throughput [B]")
+
+        self.post_function(f"tx_throughput_over_time_{self.label}")
+
     def plot_percent_decoded_over_time(self):
         fig, ax = plt.subplots()
 

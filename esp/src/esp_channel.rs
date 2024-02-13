@@ -1,4 +1,6 @@
-use crate::espnow_frame::{EspNowDecodingError, EspNowFrame};
+use crate::esp_stats_logger::EspStatsLogger;
+use crate::espnow_frame::{EspNowDecodingError, EspNowFrame, ESPNOW_HEADER_SIZE};
+use crate::espnow_stats::EspNowStats;
 use crate::frame_collection::{Frame, FrameCollection, FrameCollectionError, FrameError};
 use crate::promiscuous_wifi;
 use crate::wifi_frame::WifiFrame;
@@ -87,22 +89,6 @@ impl std::fmt::Display for EspChannelError {
 
 impl Error for EspChannelError {}
 
-pub struct EspStatsLogger {
-    path: String,
-}
-
-impl StatsLogger for EspStatsLogger {
-    fn new(path: &str) -> Result<Self, std::io::Error> {
-        Ok(Self {
-            path: path.to_owned(),
-        })
-    }
-
-    fn log(&mut self, data: &str) {
-        println!("STATS {} {}", self.path, data);
-    }
-}
-
 pub struct EspChannel {
     // NOTE: We do not access the WiFi Driver after initialize(), but we need to keep it around so
     // it doesn't deinit when dropped.
@@ -114,6 +100,7 @@ pub struct EspChannel {
     frame_collection_pool: HashMap<u32, (SystemTime, FrameCollection)>,
     tx_callback_done: Arc<Mutex<bool>>,
     tx_callback_result: Arc<Mutex<Result<(), EspChannelError>>>,
+    stats: EspNowStats,
 }
 
 impl EspChannel {
@@ -124,6 +111,7 @@ impl EspChannel {
         wifi_driver.start()?;
         let espnow_driver = EspNow::take()?;
         let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta)?);
+        let logger = EspStatsLogger::new(format!("./log/esp/log_esp_{}", mac).as_str()).unwrap();
 
         Ok(EspChannel {
             wifi_driver,
@@ -134,6 +122,7 @@ impl EspChannel {
             frame_collection_pool: HashMap::new(),
             tx_callback_done: Arc::new(Mutex::new(false)),
             tx_callback_result: Arc::new(Mutex::new(Ok(()))),
+            stats: EspNowStats::new(mac, Box::new(logger), CONFIG.stats_log_duration),
         })
     }
 
@@ -246,14 +235,6 @@ impl EspChannel {
     pub fn get_mac(&self) -> MacAddress {
         self.own_mac
     }
-
-    fn parse_received_wifi_frame(&self, frame: &[u8]) -> Option<Frame> {
-        // TODO: If parsing everything is to slow, try to only parse the relevent parts
-        // (usually the body)
-        let wifi_frame: WifiFrame = frame.try_into().ok()?;
-        let espnow_frame = EspNowFrame::try_from(wifi_frame.get_data()).ok()?;
-        Frame::try_from(espnow_frame.get_body()).ok()
-    }
 }
 
 impl Channel for EspChannel {
@@ -317,6 +298,9 @@ impl Channel for EspChannel {
                 // FIXME: Refactor this entire error handling code, it is hard to understand and
                 // I have already found multiple bugs here.
                 if result.is_err() {
+                    self.stats.add_tx_failure();
+                    self.stats.log_data();
+
                     // TODO: Should we return an error here? We have not sent the other frames yet.
                     return Err(Box::new(EspChannelError::EspNowTransmissionError(
                         result.err().unwrap(),
@@ -325,6 +309,9 @@ impl Channel for EspChannel {
 
                 let tx_callback_result = self.tx_callback_result.lock().unwrap();
                 if tx_callback_result.is_err() {
+                    self.stats.add_tx_failure();
+                    self.stats.log_data();
+
                     // TODO: There has to be a better way to do this in Rust.
                     // This is the ugliest code I have ever written.
                     let mac = match tx_callback_result.as_ref().unwrap_err() {
@@ -338,6 +325,10 @@ impl Channel for EspChannel {
 
                     return copy;
                 }
+
+                self.stats
+                    .add_sent(frame_serialized.len() + ESPNOW_HEADER_SIZE);
+                self.stats.log_data();
             }
         }
 
@@ -358,10 +349,37 @@ impl Channel for EspChannel {
             // self.rx_queue in the ISR the entire time we still are in receive().
             let raw_frame = self.rx_queue.lock().unwrap().pop_front().unwrap();
 
-            let frame = match self.parse_received_wifi_frame(raw_frame.as_slice()) {
-                Some(f) => f,
-                None => continue,
+            // TODO: If parsing everything is to slow, try to only parse the relevent parts
+            // (usually the body)
+            let wifi_frame: WifiFrame = match raw_frame.as_slice().try_into() {
+                Ok(f) => f,
+                Err(e) => {
+                    log::error!("Could not decode raw WiFi frame: {:?}", e);
+                    continue;
+                }
             };
+
+            self.stats.add_sniffed(wifi_frame.get_data().len());
+
+            let espnow_frame = match EspNowFrame::try_from(wifi_frame.get_data()) {
+                Ok(f) => f,
+                Err(_e) => {
+                    self.stats.log_data();
+                    continue;
+                }
+            };
+
+            let frame = match Frame::try_from(espnow_frame.get_body()) {
+                Ok(f) => f,
+                Err(e) => {
+                    log::error!("Could not decode split packet frame: {:?}", e);
+                    self.stats.log_data();
+                    continue;
+                }
+            };
+
+            self.stats.add_received(wifi_frame.get_data().len());
+            self.stats.log_data();
 
             if !self.frame_collection_pool.contains_key(&frame.get_magic()) {
                 // TODO: Think about where we need to limit the queue size. When receiving many

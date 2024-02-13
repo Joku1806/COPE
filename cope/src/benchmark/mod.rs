@@ -50,7 +50,7 @@ impl BenchTimer {
             .write(true)
             .open(path)
             .unwrap();
-        writeln!(file, "name, last_time, avg_time");
+        writeln!(file, "name, last_time, avg_time").unwrap();
         self.log_file = Some(file);
     }
 
@@ -102,7 +102,8 @@ impl BenchTimer {
                 name,
                 snap.lats_dur.as_nanos(),
                 snap.avg().as_nanos()
-            );
+            )
+            .unwrap();
         }
         self.log_timer = Instant::now();
     }

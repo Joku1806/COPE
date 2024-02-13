@@ -1,7 +1,5 @@
 use super::{data_generator::DataGenerator, size_distribution::SizeDistribution, TGStrategy};
 use crate::packet::PacketBuilder;
-use rand::prelude::*;
-use rand_distr::Uniform;
 use std::time::{Duration, SystemTime};
 
 pub struct RandomStrategy {

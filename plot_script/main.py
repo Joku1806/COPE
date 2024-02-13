@@ -36,6 +36,7 @@ def main():
                 )
 
                 plotter.plot_rx_throughput_over_time()
+                plotter.plot_tx_throughput_over_time()
                 plotter.plot_percent_decoded_over_time()
             except FileNotFoundError:
                 print(f"Error: File '{csv_file}' not found.")

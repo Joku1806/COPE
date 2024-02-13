@@ -7,15 +7,18 @@ use std::time::Duration;
 
 pub const CONFIG: Config<3> = Config{
     simulator_packet_loss: 0.000,
-    round_trip_time: Duration::new(1, 0),
+    round_trip_time: Duration::new(1, 500000000),
     control_packet_duration: Duration::new(0, 200000000),
     max_retrans_amount: 2,
     use_coding: true,
     packet_pool_size: 8,
+    stats_log_duration: Duration::new(1, 0),
+    log_node_stats: true,
+    log_espnow_stats: true,
     nodes: [
-        (NodeID::new('A'), MacAddress::new(72, 39, 226, 59, 48, 88)),
-        (NodeID::new('B'), MacAddress::new(52, 133, 24, 185, 26, 200)),
-        (NodeID::new('C'), MacAddress::new(72, 39, 226, 59, 50, 212)),
+        (NodeID::new('A'), MacAddress::new(52, 133, 24, 185, 27, 156)),
+        (NodeID::new('B'), MacAddress::new(52, 133, 24, 185, 26, 212)),
+        (NodeID::new('C'), MacAddress::new(52, 133, 24, 185, 27, 192)),
     ],
     relay: NodeID::new('B'),
     rx_whitelist: [

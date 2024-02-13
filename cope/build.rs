@@ -22,6 +22,9 @@ struct TOMLConfig {
     control_packet_duration: String,
     max_retrans_amount: u8,
     use_coding: bool,
+    stats_log_duration: String,
+    log_node_stats: bool,
+    log_espnow_stats: bool,
 }
 
 fn main() {
@@ -110,6 +113,9 @@ fn main() {
         parse_duration::parse(&toml_config.control_packet_duration).unwrap();
     let max_retrans_amount = toml_config.max_retrans_amount;
     let use_coding = toml_config.use_coding;
+    let stats_log_duration = parse_duration::parse(&toml_config.stats_log_duration).unwrap();
+    let log_node_stats = toml_config.log_node_stats;
+    let log_espnow_stats = toml_config.log_espnow_stats;
 
     let config = TmpConfig::new(
         nodes,
@@ -123,6 +129,9 @@ fn main() {
         control_packet_duration,
         max_retrans_amount,
         use_coding,
+        stats_log_duration,
+        log_node_stats,
+        log_espnow_stats,
     );
     let dest_path = "src/config.rs";
     generate(&config, &dest_path.to_string());
