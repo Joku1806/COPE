@@ -21,7 +21,7 @@ use esp_idf_svc::{
     },
     wifi::{EspWifi, WifiDeviceId},
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
@@ -101,7 +101,7 @@ pub struct EspChannel {
     own_mac: MacAddress,
     mac_map: HashMap<NodeID, MacAddress>,
     rx_queue: Arc<Mutex<VecDeque<Vec<u8>>>>,
-    frame_collection_pool: HashMap<u32, (SystemTime, FrameCollection)>,
+    frame_collection_pool: BTreeMap<u32, (SystemTime, FrameCollection)>,
     tx_callback_done: Arc<Mutex<bool>>,
     tx_callback_result: Arc<Mutex<Result<(), EspChannelError>>>,
     stats: EspNowStats,
@@ -122,8 +122,8 @@ impl EspChannel {
             espnow_driver,
             own_mac: mac,
             mac_map: HashMap::from(CONFIG.nodes),
-            rx_queue: Arc::new(Mutex::new(VecDeque::new())),
-            frame_collection_pool: HashMap::new(),
+            rx_queue: Arc::new(Mutex::new(VecDeque::with_capacity(RX_QUEUE_MAX_SIZE))),
+            frame_collection_pool: BTreeMap::new(),
             tx_callback_done: Arc::new(Mutex::new(false)),
             tx_callback_result: Arc::new(Mutex::new(Ok(()))),
             stats: EspNowStats::new(mac, Box::new(logger), CONFIG.stats_log_duration),
@@ -448,11 +448,6 @@ impl Channel for EspChannel {
 
                 return true;
             });
-
-        // TODO: It is not really clear if this really helps with memory bloat or just
-        // increases congestion. Needs to be benchmarked.
-        self.rx_queue.lock().unwrap().shrink_to_fit();
-        self.frame_collection_pool.shrink_to_fit();
 
         log::debug!(
             "RX queue has {} packets ready for dequeing",
