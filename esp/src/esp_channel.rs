@@ -168,10 +168,16 @@ impl EspChannel {
             // NOTE: As this is an ISR, it should do as little as possible. It is also
             // possible, that ACKs are only sent out after this function returns. So we
             // get the data out and do all parsing in the main thread.
-            // TODO: If we receive data faster than we can process in the main thread, we
-            // will quickly OOM. In this case, we need to limit the amount of items pushed
-            // to the queue and drop frames.
-            rx_queue_clone.lock().unwrap().push_back(Vec::from(bytes));
+            let mut queue = rx_queue_clone.lock().unwrap();
+
+            if queue.len() >= RX_QUEUE_MAX_SIZE {
+                // NOTE: I don't know if it is good form to print to Serial in an ISR, but we
+                // can always disable it later, if it causes a problem.
+                log::warn!("Have to drop frame, because RX queue is full!");
+                return;
+            }
+
+            queue.push_back(Vec::from(bytes));
         };
 
         promiscuous_wifi::set_promiscuous_rx_callback(&mut self.wifi_driver, rx_callback)?;
@@ -382,15 +388,6 @@ impl Channel for EspChannel {
             self.stats.log_data();
 
             if !self.frame_collection_pool.contains_key(&frame.get_magic()) {
-                // TODO: Think about where we need to limit the queue size. When receiving many
-                // packets, we could OOM really quickly because self.rx_queue is currently
-                // unbounded. This needs to be tested in practice, I don't know the ESP
-                // performance characteristics enough to make a decision now.
-                if self.frame_collection_pool.len() >= RX_QUEUE_MAX_SIZE {
-                    log::warn!("Have to drop packet, because RX queue is full!");
-                    continue;
-                }
-
                 self.frame_collection_pool.insert(
                     frame.get_magic(),
                     (SystemTime::now(), FrameCollection::new()),
