@@ -31,6 +31,7 @@ use std::time::{Duration, SystemTime};
 // and outside traffic. This calculation of course assumes, that the Channel
 // receive() function is called at least once a second to empty the queue.
 const RX_QUEUE_MAX_SIZE: usize = 240;
+const RX_FRAMECOLLECTION_MAX_SIZE: usize = 120;
 const ESPNOW_FRAME_SIZE: u8 = 250;
 
 #[derive(Debug)]
@@ -392,6 +393,17 @@ impl Channel for EspChannel {
             self.stats.log_data();
 
             if !self.frame_collection_pool.contains_key(&frame.get_magic()) {
+                if self.frame_collection_pool.len() >= RX_FRAMECOLLECTION_MAX_SIZE {
+                    log::warn!("FrameCollection pool is full, need to drop oldest packet.");
+                    let to_remove = *self
+                        .frame_collection_pool
+                        .iter()
+                        .min_by(|(_, (a, _)), (_, (b, _))| a.cmp(&b))
+                        .map(|e| e.0)
+                        .unwrap();
+                    self.frame_collection_pool.remove(&to_remove);
+                }
+
                 self.frame_collection_pool.insert(
                     frame.get_magic(),
                     (SystemTime::now(), FrameCollection::new()),
