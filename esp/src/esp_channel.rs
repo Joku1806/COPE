@@ -26,7 +26,11 @@ use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-const RX_QUEUE_MAX_SIZE: usize = 128;
+// NOTE: If the maximum EspNow Throughput is 60kB/s, we receive ~200 EspNow
+// frames per second. The extra 40 frames leave room for 10kB more fluctuations
+// and outside traffic. This calculation of course assumes, that the Channel
+// receive() function is called at least once a second to empty the queue.
+const RX_QUEUE_MAX_SIZE: usize = 240;
 const ESPNOW_FRAME_SIZE: u8 = 250;
 
 #[derive(Debug)]
