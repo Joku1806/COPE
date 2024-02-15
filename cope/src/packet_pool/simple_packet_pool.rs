@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::{PPEntry, PacketPool};
 use crate::packet::{CodingInfo, Packet, packet::CodingHeader};
 use cope_config::types::node_id::NodeID;
@@ -19,6 +21,11 @@ impl SimplePacketPool {
             queue: Vec::new(),
             max_size,
         }
+    }
+
+    pub fn unique_nexthops(&self) -> usize {
+        let uniques: HashSet<NodeID> = self.queue.iter().map(|(ci, _)| ci.nexthop).collect();
+        uniques.len()
     }
 }
 
