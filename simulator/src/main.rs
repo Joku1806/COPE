@@ -1,5 +1,8 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::channel;
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use cope::config::CONFIG;
 use cope::stats::{Stats, StatsLogger};
@@ -20,6 +23,9 @@ fn main() -> anyhow::Result<()> {
     let mut node_channels = HashMap::new();
 
     let node_ids = CONFIG.get_node_ids();
+    let mut handles = vec![];
+
+    let finished = Arc::new(AtomicBool::new(false));
 
     for id in node_ids.iter() {
         let (node_tx, node_rx) = channel();
@@ -38,12 +44,33 @@ fn main() -> anyhow::Result<()> {
         let bench_path = format!("./log/bench/log_{}", id);
         node.set_bench_log_path(&bench_path);
 
-        std::thread::spawn(move || loop {
-            node.tick();
+        let handle = std::thread::spawn({
+            let finished_clone = finished.clone();
+            move || loop {
+                if finished_clone.load(Ordering::SeqCst) {
+                    break;
+                }
+
+                node.tick();
+            }
         });
+        handles.push(handle);
     }
 
+    let start = SystemTime::now();
+    let runtime = Duration::from_secs(10);
+
     loop {
+        let elapsed = match start.elapsed() {
+            Ok(e) => e,
+            Err(_) => Duration::ZERO,
+        };
+
+        if elapsed > runtime {
+            finished.store(true, Ordering::SeqCst);
+            break;
+        }
+
         let packet = rx.recv().unwrap();
         let sender = packet.sender();
         for (id, node_tx) in node_channels.iter() {
@@ -66,4 +93,10 @@ fn main() -> anyhow::Result<()> {
             }
         }
     }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    Ok(())
 }
