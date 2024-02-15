@@ -44,6 +44,8 @@ def main():
                 print(
                     f"Error: File '{csv_file}' is empty or not in the expected CSV format."
                 )
+            except:
+                continue
 
         joined_paths = [os.path.join(root, f) for f in files]
         df = DataReader(joined_paths).read()
