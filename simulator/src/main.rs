@@ -17,7 +17,7 @@ mod simulator_stats_logger;
 
 fn main() -> anyhow::Result<()> {
     SimpleLogger::new()
-        .with_level(log::LevelFilter::Info)
+        .with_level(log::LevelFilter::Off)
         .init()?;
 
     let (tx, rx) = channel();

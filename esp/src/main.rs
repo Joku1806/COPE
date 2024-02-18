@@ -30,7 +30,7 @@ use crate::{esp_channel::EspChannel, esp_stats_logger::EspStatsLogger};
 fn main() -> anyhow::Result<()> {
     esp_idf_svc::sys::link_patches();
     SimpleLogger::new()
-        .with_level(log::LevelFilter::Info)
+        .with_level(log::LevelFilter::Off)
         .init()?;
 
     let peripherals = Peripherals::take()?;
