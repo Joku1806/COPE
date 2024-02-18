@@ -20,6 +20,8 @@ To run the simulator, enter the `simulator` directory and run `cargo run`. Likew
 
 By default, all logging is disabled. It can be enabled again by changing the global log level for `SimpleLogger` in the respective `main.rs` files.
 
+To run our plot scripts, source the python `venv` created by `install.sh` and then run `python main.py ../logs/raw_throughput_1Mbit` from the `plot_script` directory. Not all data can be plotted using all plots, if you run into any errors, just comment out the offending plots.
+
 ## Debugging
 
 For a better debugging experience, install the "time-travelling" debugger [rr](https://rr-project.org/). Inside the `simulator` subdirectory, there is a custom `.gdbinit` file, which is needed for `rr` to print rust variables. To be able to load this file, you need to add the line `set auto-load safe-path .` to your global `~/.gdbinit` file. After that, you can record a simulator run using `rr record target/debug/simulator` and replay it using `rr replay`.
