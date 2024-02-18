@@ -12,9 +12,9 @@ cargo install espup
 espup install --nightly-version nightly-2023-10-05 --toolchain-version 1.73.0 --targets esp32s3 --std
 
 # NOTE: Inform user about weird env variables that have to be sourced
-echo "[*] espup has set up some env variables in $HOME/export-esp.sh:\n"
-cat $HOME/export-esp.sh
-echo "\n[*] Please make sure that these variables are present in every opened shell."
+printf "[*] espup has set up some env variables in %s/export-esp.sh:\n" "$HOME"
+cat "$HOME"/export-esp.sh
+printf "\n[*] Please make sure that these variables are present in every opened shell."
 echo "[*] Otherwise the project will not build!"
 echo "[*] For more information see https://esp-rs.github.io/book/installation/riscv-and-xtensa.html#3-set-up-the-environment-variables"
 
@@ -25,7 +25,7 @@ apt-get install git wget flex bison gperf python3 python3-pip python3-venv cmake
 
 # NOTE: Install ldproxy, which is required for linking
 echo "[*] Installing ldproxy"
-cd $OWN_DIR/esp
+cd "$OWN_DIR"/esp || exit
 cargo install ldproxy
 
 # NOTE: Install a precompiled version of espflash, which works on the lab machines
@@ -54,7 +54,7 @@ echo "[*] Installed venv in /tmp/COPE, make sure to source it before running any
 
 echo "[*] Installing plot script dependencies"
 source /tmp/COPE/bin/activate
-cd $OWN_DIR/plot_script
+cd "$OWN_DIR"/plot_script || exit
 pip install -r requirements.txt
 
 echo "[*] Complete installation finished!"
