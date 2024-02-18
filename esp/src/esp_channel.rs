@@ -179,7 +179,7 @@ impl EspChannel {
                 // NOTE: I don't know if it is good form to print to Serial in an ISR, but we
                 // can always disable it later, if it causes a problem.
                 log::warn!("Have to drop frame, because RX queue is full!");
-                return;
+                queue.pop_front();
             }
 
             queue.push_back(Vec::from(bytes));
