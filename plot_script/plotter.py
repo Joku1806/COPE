@@ -61,6 +61,9 @@ class Plotter:
     def percent_formatter() -> Callable:
         return FuncFormatter(lambda v, _: f"{v * 100.0:.0f}%")
 
+    def target_throughput_extract_kB(v) -> float:
+        return int(v[v.find("(") + 1 : v.find(")")]) / 1000
+
     def plot_rx_throughput_over_time(self):
         fig, ax = plt.subplots()
 
@@ -130,6 +133,74 @@ class Plotter:
         ax.set_ylabel("Decoded %")
 
         self.post_function(f"percent_decoded_over_time_{self.label}")
+
+    def plot_coding_gain_by_target_throughput(self, coding_df, nocoding_df):
+        tgs_coding = coding_df["traffic_generator"].unique()
+        tgs_nocoding = nocoding_df["traffic_generator"].unique()
+        tgs = sorted(list(set(tgs_coding) & set(tgs_nocoding) - set(["None"])))
+
+        coding_gains = []
+        for tg in tgs:
+            slice_coding = coding_df[coding_df["traffic_generator"] == tg]
+            slice_nocoding = nocoding_df[nocoding_df["traffic_generator"] == tg]
+
+            # NOTE: We need to normalize by the experiment duration,
+            # since no two experiment run for the same exact time.
+            pps_coding = (
+                slice_coding["packets_sent"].sum()
+                / slice_coding["time_us"].max().total_seconds()
+            )
+            pps_nocoding = (
+                slice_nocoding["packets_sent"].sum()
+                / slice_nocoding["time_us"].max().total_seconds()
+            )
+
+            coding_gains.append(pps_nocoding / pps_coding)
+
+        fig, ax = plt.subplots()
+
+        ax.plot(tgs, coding_gains, linestyle="--", marker="o")
+        ax.set_xlabel("Target Throughput [kB]")
+        ax.set_ylabel("Coding Gain")
+
+        # NOTE: matplotlib does not allow str arguments for FuncFormatter for some reason,
+        # so we have to use this workaround.
+        xlabels = [f"{Plotter.target_throughput_extract_kB(v):g}" for v in tgs]
+        ax.set_xticklabels(xlabels)
+
+        self.post_function(f"coding_gain_by_target_throughput_{self.label}")
+
+    def plot_percent_decoded_by_target_throughput(self, coding_df):
+        tgs = sorted(coding_df["traffic_generator"].unique())
+        if "None" in tgs:
+            tgs.remove("None")
+
+        percent_decodeds = []
+        for tg in tgs:
+            slice_coding = coding_df[coding_df["traffic_generator"] == tg]
+
+            native_packets = slice_coding["natives_received"].sum()
+            decoded_packets = slice_coding["decoded_received"].sum()
+            coded_packets = slice_coding["coded_received"].sum()
+
+            percent_decodeds.append(
+                (decoded_packets + native_packets)
+                / (coded_packets + decoded_packets + native_packets)
+            )
+
+        fig, ax = plt.subplots()
+
+        ax.plot(tgs, percent_decodeds, linestyle="--", marker="o")
+        ax.set_xlabel("Target Throughput [kB]")
+        ax.set_ylabel("Decoded %")
+
+        # NOTE: matplotlib does not allow str arguments for FuncFormatter for some reason,
+        # so we have to use this workaround.
+        xlabels = [f"{Plotter.target_throughput_extract_kB(v):g}" for v in tgs]
+        ax.set_xticklabels(xlabels)
+        ax.yaxis.set_major_formatter(Plotter.percent_formatter())
+
+        self.post_function(f"percent_decoded_by_target_throughput_{self.label}")
 
     # FIXME: This does not work correctly at all, needs to be fixed
     # I think we just have to combine all stored files inside the
