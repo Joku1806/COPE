@@ -37,6 +37,7 @@ class DataReader:
             DataReader.subtract_previous_value, axis="index"
         )
         df["time_us"] = pd.to_timedelta(df["time_us"], unit="us")
+        df["time_us"] -= df["time_us"].iloc[0]
 
         return df
 
