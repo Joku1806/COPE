@@ -22,6 +22,8 @@ def main():
         print(f"Error: Directory '{directory}' does not exist.")
         return
 
+    # NOTE: This will not work for all data sources.
+    # If you don't want to crash, comment out this entire for loop for esp_MAC csvs.
     for root, _, files in os.walk(directory):
         for file in files:
             csv_file = os.path.join(root, file)
@@ -44,6 +46,8 @@ def main():
                 print(
                     f"Error: File '{csv_file}' is empty or not in the expected CSV format."
                 )
+            except:
+                continue
 
         joined_paths = [os.path.join(root, f) for f in files]
         df = DataReader(joined_paths).read()
@@ -55,6 +59,39 @@ def main():
             set_figure_title=True,
         )
         plotter.plot_rx_tx_barchart()
+
+    all_paths = [
+        os.path.join(dp, f)
+        for dp, dn, filenames in os.walk(directory)
+        for f in filenames
+    ]
+    coding_paths = [
+        p
+        for p in all_paths
+        if not "esp" in p
+        and not "nocoding" in p
+        and not ".toml" in p
+        and not ".txt" in p
+    ]
+    nocoding_paths = [
+        p
+        for p in all_paths
+        if not "esp" in p and "nocoding" in p and not ".toml" in p and not ".txt" in p
+    ]
+
+    df_coding = DataReader(coding_paths).read()
+    df_nocoding = DataReader(nocoding_paths).read()
+
+    plotter = Plotter(
+        None,
+        "results",
+        "All Nodes",
+        interactive=True,
+    )
+
+    plotter.plot_coding_gain_by_target_throughput(df_coding, df_nocoding)
+    plotter.plot_percent_decoded_by_target_throughput(df_coding)
+    plotter.plot_target_throughput_vs_achieved_throughput(df_coding, df_nocoding)
 
 
 if __name__ == "__main__":

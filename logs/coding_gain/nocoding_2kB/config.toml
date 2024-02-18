@@ -1,0 +1,45 @@
+nodes = [
+    [
+        "A",
+        "48:27:e2:3b:33:44",
+    ],
+    [
+        "B",
+        "48:27:e2:3b:31:04",
+    ],
+    [
+        "C",
+        "48:27:e2:3b:30:58",
+    ],
+]
+
+relay = "B"
+
+rx_whitelist = [["A", ["B"]], ["B", ["A", "C"]], ["C", ["B"]]]
+
+tx_whitelist = [["A", ["C"]], ["B", ["A", "C"]], ["C", ["A"]]]
+
+traffic_generators = [
+    [
+        "A",
+        "Random(2kB)",
+    ],
+    [
+        "B",
+        "None",
+    ],
+    [
+        "C",
+        "Random(2kB)",
+    ],
+]
+
+simulator_packet_loss = 0.0
+round_trip_time = "1000ms"
+packet_pool_size = 64
+control_packet_duration = "200ms"
+max_retrans_amount = 2
+use_coding = false
+stats_log_duration = "1s"
+log_node_stats = true
+log_espnow_stats = true

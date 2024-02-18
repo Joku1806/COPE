@@ -72,8 +72,8 @@ impl RelayNodeCoding {
     }
 
     fn has_coding_opp(&self) -> bool {
-        // FIXME: This can definitely be improved
-        self.packet_pool.size() >= 2
+        self.packet_pool.unique_nexthops() >= 2
+            || self.last_packet_send.elapsed() > CONFIG.control_packet_duration
     }
 
     fn code_packet(

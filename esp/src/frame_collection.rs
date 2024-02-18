@@ -159,6 +159,21 @@ impl FrameCollection {
         self
     }
 
+    fn is_frame_set(&self, index: usize) -> bool {
+        if index >= self.frames.len() {
+            return false;
+        }
+
+        self.frames.get(index).unwrap().is_some()
+    }
+
+    fn should_extend(&self, frame: &Frame) -> bool {
+        match frame.ftype {
+            FrameType::First((frame_count, _)) => frame_count as usize > self.frames.len(),
+            FrameType::Following => frame.index as usize + 1 > self.frames.len(),
+        }
+    }
+
     // FIXME: We still need to support out-of-order frame adding.
     // For example, if there is some error when receiving the first frame, all other
     // frames can not be received. This happens, because at that point the frame
@@ -166,38 +181,46 @@ impl FrameCollection {
     pub fn add_frame(&mut self, frame: Frame) -> Result<(), FrameCollectionError> {
         let index = frame.index as usize;
 
-        if frame.ftype == FrameType::Following {
-            if index >= self.frames.len() {
-                return Err(FrameCollectionError::InvalidFrameCount(index + 1));
-            }
-
-            let magic = match self.magic {
-                Some(m) => m,
-                None => return Err(FrameCollectionError::UnsetMagic),
-            };
-
-            if magic != frame.get_magic() {
-                return Err(FrameCollectionError::MismatchedMagic(frame.get_magic()));
-            }
-        }
-
-        // FIXME: Do this without unwrap. In general, the many Optional<> fields in this
-        // struct are awkward to work with.
-        if index < self.frames.len() && self.frames.get(index).unwrap().is_some() {
-            // NOTE: We explicitly return Ok here, since our use case involves
-            // retransmitting entire packets, even if some frames could be received. On
-            // retransmit, we would of course hit this path. Because we know that the frames
-            // will be equal, we can just return early.
+        // NOTE: When single frames are lost in transit, the entire packet will be
+        // retransmitted. So we know that frames already set will be equal to the newly
+        // received ones and can return early.
+        if self.is_frame_set(index) {
             return Ok(());
         }
 
-        match frame.ftype {
-            FrameType::First((frame_count, _)) => {
-                self.frames.resize_with(frame_count as usize, || None);
-                self.magic = Some(frame.get_magic());
+        // NOTE: If the FrameCollection can not store the received frame at its
+        // index, then it needs to be resized. But this should only be done, if we
+        // have incomplete info about the total frame count, i.e. if the first
+        // frame is not stored yet or only frames with indices smaller than ours are
+        // stored.
+        if !self.is_frame_set(0) && self.should_extend(&frame) {
+            let sz = match frame.ftype {
+                FrameType::First((frame_count, _)) => frame_count as usize,
+                FrameType::Following => index + 1,
+            };
+
+            self.frames.resize_with(sz, || None);
+            self.magic = Some(frame.get_magic());
+        }
+
+        if index >= self.frames.len() {
+            return Err(FrameCollectionError::InvalidFrameCount(index + 1));
+        }
+
+        if let FrameType::First((frame_count, _)) = frame.ftype {
+            if frame_count as usize != self.frames.len() {
+                return Err(FrameCollectionError::InvalidFrameCount(self.frames.len()));
             }
-            FrameType::Following => (),
+        }
+
+        let magic = match self.magic {
+            Some(m) => m,
+            None => return Err(FrameCollectionError::UnsetMagic),
         };
+
+        if magic != frame.get_magic() {
+            return Err(FrameCollectionError::MismatchedMagic(frame.get_magic()));
+        }
 
         self.frames[index] = Some(frame);
 
@@ -206,6 +229,13 @@ impl FrameCollection {
 
     pub fn is_complete(&self) -> bool {
         return !self.frames.is_empty() && !self.frames.contains(&None);
+    }
+
+    pub fn total_size(&self) -> usize {
+        self.frames.iter().fold(0, |acc, frame| match frame {
+            Some(f) => acc + f.data.len(),
+            None => acc,
+        })
     }
 
     fn calculate_frame_count(&self, data_len: usize) -> Result<u8, FrameCollectionError> {
@@ -487,6 +517,36 @@ mod tests {
     }
 
     #[test_case]
+    fn out_of_order_out_of_range_index_should_fail() -> Result<(), Error> {
+        let mut collection = FrameCollection::new();
+
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::Following,
+                    2,
+                    0x1f1f1f1f,
+                    Vec::from([0x01, 0x23, 0x45]),
+                ))
+                .is_ok(),
+            "out_of_order_out_of_range_index_should_fail: Could not add frame"
+        );
+
+        anyhow::ensure!(
+            matches!(collection
+                .add_frame(Frame::new(
+                    FrameType::First((2, 6)),
+                    0,
+                    0x1f1f1f1f,
+                    Vec::from([0x01, 0x23, 0x45]),
+                )), Err(FrameCollectionError::InvalidFrameCount(3))),
+            "out_of_order_out_of_range_index_should_fail: Could add frame with index 2, even though the collection size is set to 2"
+        );
+
+        Ok(())
+    }
+
+    #[test_case]
     fn decode_with_missing_index_should_fail() -> Result<(), Error> {
         let mut collection = FrameCollection::new();
 
@@ -625,8 +685,6 @@ mod tests {
     fn valid_decode_with_out_of_order_insertion_should_succeed() -> Result<(), Error> {
         let mut collection = FrameCollection::new();
 
-        // TODO: Test for: When following frame is added first, so the frame count is
-        // not known yet.
         anyhow::ensure!(
             collection
                 .add_frame(Frame::new(
@@ -670,6 +728,57 @@ mod tests {
         };
 
         anyhow::ensure!(decoded == expected, "valid_decode_with_out_of_order_insertion_should_succeed: Mismatch when decoding frames");
+
+        Ok(())
+    }
+
+    #[test_case]
+    fn valid_decode_with_first_frame_out_of_order_insertion_should_succeed() -> Result<(), Error> {
+        let mut collection = FrameCollection::new();
+
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::Following,
+                    2,
+                    0x13371337,
+                    Vec::from([0xab, 0xcd, 0xef]),
+                ))
+                .is_ok(),
+            "valid_decode_with_first_frame_out_of_order_insertion_should_succeed: Could not add frame"
+        );
+
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::Following,
+                    1,
+                    0x13371337,
+                    Vec::from([0x45, 0x67, 0x89]),
+                ))
+                .is_ok(),
+            "valid_decode_with_first_frame_out_of_order_insertion_should_succeed: Could not add frame"
+        );
+
+        anyhow::ensure!(
+            collection
+                .add_frame(Frame::new(
+                    FrameType::First((3, 9)),
+                    0,
+                    0x13371337,
+                    Vec::from([0x01, 0x23, 0x45]),
+                ))
+                .is_ok(),
+            "valid_decode_with_first_frame_out_of_order_insertion_should_succeed: Could not add frame"
+        );
+
+        let expected = Vec::from([0x01, 0x23, 0x45, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef]);
+        let decoded = match collection.decode() {
+            Ok(d) => d,
+            Err(_) => anyhow::bail!("valid_decode_with_first_frame_out_of_order_insertion_should_succeed: Could not decode FrameCollection"),
+        };
+
+        anyhow::ensure!(decoded == expected, "valid_decode_with_first_frame_out_of_order_insertion_should_succeed: Mismatch when decoding frames");
 
         Ok(())
     }

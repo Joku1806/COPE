@@ -1,5 +1,7 @@
 use bitvec::{field::BitField, prelude as bv, view::BitView};
 
+pub const WIFI_HEADER_SIZE: usize = 48;
+
 #[derive(Debug)]
 pub enum WifiFrameDecodingError {
     InvalidSigMode,
@@ -184,8 +186,7 @@ impl TryFrom<&[u8]> for WifiFrame {
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         let mut frame = WifiFrame::default();
-        const HEADER_SIZE: usize = 48;
-        let header = &bytes[..HEADER_SIZE];
+        let header = &bytes[..WIFI_HEADER_SIZE];
         let bits = header.view_bits::<bv::Lsb0>();
 
         // TODO: Return all errors by coercing to a common error type somehow, instead
@@ -210,7 +211,7 @@ impl TryFrom<&[u8]> for WifiFrame {
         frame.header.sig_len = bits[352..364].load::<u32>();
         frame.header.rx_state = bits[376..384].load::<u32>();
 
-        frame.data = Vec::from(&bytes[HEADER_SIZE..]);
+        frame.data = Vec::from(&bytes[WIFI_HEADER_SIZE..]);
 
         Ok(frame)
     }
