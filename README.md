@@ -1,6 +1,6 @@
 # COPE
 
-This is an implementation of the [COPE protocol](https://dl.acm.org/doi/abs/10.1145/1159913.1159942) for the ESP32-S3 written in Rust.
+This is an implementation of the [COPE protocol](https://dl.acm.org/doi/abs/10.1145/1159913.1159942) for the ESP32-S3 written in Rust. The final code submitted for grading is on the `main` branch, all other branches should be ignored.
 
 ## Installation
 
