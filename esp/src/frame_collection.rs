@@ -231,6 +231,13 @@ impl FrameCollection {
         return !self.frames.is_empty() && !self.frames.contains(&None);
     }
 
+    pub fn total_size(&self) -> usize {
+        self.frames.iter().fold(0, |acc, frame| match frame {
+            Some(f) => acc + f.data.len(),
+            None => acc,
+        })
+    }
+
     fn calculate_frame_count(&self, data_len: usize) -> Result<u8, FrameCollectionError> {
         let mut frame_count: u8 = 0;
         let mut start = 0;

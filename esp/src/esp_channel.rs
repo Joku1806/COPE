@@ -3,7 +3,7 @@ use crate::espnow_frame::{EspNowDecodingError, EspNowFrame, ESPNOW_HEADER_SIZE};
 use crate::espnow_stats::EspNowStats;
 use crate::frame_collection::{Frame, FrameCollection, FrameCollectionError, FrameError};
 use crate::promiscuous_wifi;
-use crate::wifi_frame::WifiFrame;
+use crate::wifi_frame::{WifiFrame, WIFI_HEADER_SIZE};
 use cope::channel::Channel;
 use cope::config::CONFIG;
 use cope::packet::Packet;
@@ -106,7 +106,7 @@ pub struct EspChannel {
     frame_collection_pool: BTreeMap<u32, (SystemTime, FrameCollection)>,
     tx_callback_done: Arc<Mutex<bool>>,
     tx_callback_result: Arc<Mutex<Result<(), EspChannelError>>>,
-    stats: EspNowStats,
+    stats: Arc<Mutex<EspNowStats>>,
 }
 
 impl EspChannel {
@@ -131,7 +131,11 @@ impl EspChannel {
             frame_collection_pool: BTreeMap::new(),
             tx_callback_done: Arc::new(Mutex::new(false)),
             tx_callback_result: Arc::new(Mutex::new(Ok(()))),
-            stats: EspNowStats::new(mac, Box::new(logger), CONFIG.stats_log_duration),
+            stats: Arc::new(Mutex::new(EspNowStats::new(
+                mac,
+                Box::new(logger),
+                CONFIG.stats_log_duration,
+            ))),
         })
     }
 
@@ -173,6 +177,7 @@ impl EspChannel {
 
     fn register_callbacks(&mut self) -> Result<(), EspError> {
         let rx_queue_clone = self.rx_queue.clone();
+        let stats_clone = self.stats.clone();
         let rx_callback = move |bytes: &[u8]| {
             // NOTE: As this is an ISR, it should do as little as possible. It is also
             // possible, that ACKs are only sent out after this function returns. So we
@@ -183,7 +188,13 @@ impl EspChannel {
                 // NOTE: I don't know if it is good form to print to Serial in an ISR, but we
                 // can always disable it later, if it causes a problem.
                 log::warn!("Have to drop frame, because RX queue is full!");
-                queue.pop_front();
+
+                let dropped = queue.pop_front().unwrap();
+                stats_clone.lock().unwrap().add_raw_frame_dropped();
+                stats_clone
+                    .lock()
+                    .unwrap()
+                    .add_raw_data_dropped(dropped.len() - WIFI_HEADER_SIZE);
             }
 
             queue.push_back(Vec::from(bytes));
@@ -254,6 +265,8 @@ impl EspChannel {
 
 impl Channel for EspChannel {
     fn transmit(&mut self, packet: &Packet) -> Result<(), Box<dyn Error>> {
+        self.stats.lock().unwrap().log_data();
+
         let receiver = match packet.canonical_receiver() {
             None => return Err(Box::new(EspChannelError::UnknownReceiver)),
             Some(r) => r,
@@ -313,8 +326,7 @@ impl Channel for EspChannel {
                 // FIXME: Refactor this entire error handling code, it is hard to understand and
                 // I have already found multiple bugs here.
                 if result.is_err() {
-                    self.stats.add_tx_failure();
-                    self.stats.log_data();
+                    self.stats.lock().unwrap().add_tx_failure();
 
                     // TODO: Should we return an error here? We have not sent the other frames yet.
                     return Err(Box::new(EspChannelError::EspNowTransmissionError(
@@ -324,8 +336,7 @@ impl Channel for EspChannel {
 
                 let tx_callback_result = self.tx_callback_result.lock().unwrap();
                 if tx_callback_result.is_err() {
-                    self.stats.add_tx_failure();
-                    self.stats.log_data();
+                    self.stats.lock().unwrap().add_tx_failure();
 
                     // TODO: There has to be a better way to do this in Rust.
                     // This is the ugliest code I have ever written.
@@ -341,16 +352,26 @@ impl Channel for EspChannel {
                     return copy;
                 }
 
+                self.stats.lock().unwrap().add_raw_frame_sent();
                 self.stats
-                    .add_sent(frame_serialized.len() + ESPNOW_HEADER_SIZE);
-                self.stats.log_data();
+                    .lock()
+                    .unwrap()
+                    .add_raw_data_sent(frame_serialized.len() + ESPNOW_HEADER_SIZE);
             }
         }
+
+        self.stats.lock().unwrap().add_packet_sent();
+        self.stats
+            .lock()
+            .unwrap()
+            .add_packet_data_sent(packet.data().len());
 
         Ok(())
     }
 
     fn receive(&mut self) -> Option<Packet> {
+        self.stats.lock().unwrap().log_data();
+
         // NOTE: To prevent raw frame parsing to turn into an infinite loop, we set an
         // upper bound on the raw frames at the start. So even if more frames
         // are received during the parsing loop, we will not attempt to process them.
@@ -370,16 +391,18 @@ impl Channel for EspChannel {
                 Ok(f) => f,
                 Err(e) => {
                     log::error!("Could not decode raw WiFi frame: {:?}", e);
+                    self.stats.lock().unwrap().add_raw_frame_dropped();
+                    self.stats
+                        .lock()
+                        .unwrap()
+                        .add_raw_data_dropped(raw_frame.len() - WIFI_HEADER_SIZE);
                     continue;
                 }
             };
 
-            self.stats.add_sniffed(wifi_frame.get_data().len());
-
             let espnow_frame = match EspNowFrame::try_from(wifi_frame.get_data()) {
                 Ok(f) => f,
                 Err(_e) => {
-                    self.stats.log_data();
                     continue;
                 }
             };
@@ -388,24 +411,34 @@ impl Channel for EspChannel {
                 Ok(f) => f,
                 Err(e) => {
                     log::error!("Could not decode split packet frame: {:?}", e);
-                    self.stats.log_data();
                     continue;
                 }
             };
 
-            self.stats.add_received(wifi_frame.get_data().len());
-            self.stats.log_data();
+            self.stats.lock().unwrap().add_raw_frame_received();
+            self.stats
+                .lock()
+                .unwrap()
+                .add_raw_data_received(raw_frame.len() - WIFI_HEADER_SIZE);
 
             if !self.frame_collection_pool.contains_key(&frame.get_magic()) {
                 if self.frame_collection_pool.len() >= RX_FRAMECOLLECTION_MAX_SIZE {
                     log::warn!("FrameCollection pool is full, need to drop oldest packet.");
+
                     let to_remove = *self
                         .frame_collection_pool
                         .iter()
                         .min_by(|(_, (a, _)), (_, (b, _))| a.cmp(&b))
                         .map(|e| e.0)
                         .unwrap();
-                    self.frame_collection_pool.remove(&to_remove);
+
+                    let removed = self.frame_collection_pool.remove(&to_remove).unwrap();
+
+                    self.stats.lock().unwrap().add_packet_dropped();
+                    self.stats
+                        .lock()
+                        .unwrap()
+                        .add_packet_data_dropped(removed.1.total_size());
                 }
 
                 self.frame_collection_pool.insert(
@@ -443,6 +476,13 @@ impl Channel for EspChannel {
                 // NOTE: Any incomplete packets, where the last frame was received RTT
                 // ago are assumed to be lost and should be removed.
                 if elapsed >= CONFIG.round_trip_time && !collection.is_complete() {
+                    self.stats.lock().unwrap().add_packet_dropped();
+                    // NOTE: We can not know here, how many bytes of user data were sent in
+                    // this packet, the unparsed size is our best guess.
+                    self.stats
+                        .lock()
+                        .unwrap()
+                        .add_packet_data_dropped(collection.total_size());
                     return false;
                 }
 
@@ -458,6 +498,22 @@ impl Channel for EspChannel {
                                 .map_err(|e| log::warn!("Could not decode packet: {}", e))
                                 .ok()
                         });
+
+                    if packet.is_none() {
+                        self.stats.lock().unwrap().add_packet_dropped();
+                        // NOTE: We can not know here, how many bytes of user data were sent in
+                        // this packet, the unparsed size is our best guess.
+                        self.stats
+                            .lock()
+                            .unwrap()
+                            .add_packet_data_dropped(collection.total_size());
+                    } else {
+                        self.stats.lock().unwrap().add_packet_received();
+                        self.stats
+                            .lock()
+                            .unwrap()
+                            .add_packet_data_received(packet.as_ref().unwrap().data().len());
+                    }
 
                     return false;
                 }
