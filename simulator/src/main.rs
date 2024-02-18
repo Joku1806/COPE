@@ -7,6 +7,7 @@ use std::time::{Duration, SystemTime};
 use cope::config::CONFIG;
 use cope::stats::{Stats, StatsLogger};
 use cope::Node;
+use rand::Rng;
 use simple_logger::SimpleLogger;
 use simulator_channel::SimulatorChannel;
 use simulator_stats_logger::SimulatorStatsLogger;
@@ -31,9 +32,15 @@ fn main() -> anyhow::Result<()> {
         let (node_tx, node_rx) = channel();
         node_channels.insert(*id, node_tx);
 
-        let logger =
-            SimulatorStatsLogger::new(format!("./log/simulator/log_{}", id.unwrap()).as_str())
-                .unwrap();
+        let logger = SimulatorStatsLogger::new(
+            format!(
+                "./log/node_{}_{:X}",
+                id.unwrap(),
+                rand::thread_rng().gen::<u64>()
+            )
+            .as_str(),
+        )
+        .unwrap();
         let stats = Stats::new(*id, Box::new(logger), CONFIG.stats_log_duration);
 
         let mut node = Node::new(

@@ -21,6 +21,7 @@ use esp_idf_svc::{
     },
     wifi::{EspWifi, WifiDeviceId},
 };
+use rand::Rng;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::error::Error;
 use std::sync::{Arc, Mutex};
@@ -116,7 +117,10 @@ impl EspChannel {
         wifi_driver.start()?;
         let espnow_driver = EspNow::take()?;
         let mac = MacAddress::from(wifi_driver.get_mac(WifiDeviceId::Sta)?);
-        let logger = EspStatsLogger::new(format!("./log/esp/log_esp_{}", mac).as_str()).unwrap();
+        let logger = EspStatsLogger::new(
+            format!("./log/esp_{}_{:X}", mac, rand::thread_rng().gen::<u64>()).as_str(),
+        )
+        .unwrap();
 
         Ok(EspChannel {
             wifi_driver,

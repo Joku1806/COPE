@@ -15,6 +15,7 @@ use std::time::Duration;
 use cope::stats::Stats;
 use cope::Node;
 use cope::{config::CONFIG, stats::StatsLogger};
+use rand::Rng;
 use simple_logger::SimpleLogger;
 
 use enumset::enum_set;
@@ -55,7 +56,15 @@ fn main() -> anyhow::Result<()> {
         .get_node_id_for(mac)
         .expect("Config should contain Node MAC addresses");
 
-    let logger = EspStatsLogger::new(format!("./log/esp/log_{}", id.unwrap()).as_str()).unwrap();
+    let logger = EspStatsLogger::new(
+        format!(
+            "./log/node_{}_{:X}",
+            id.unwrap(),
+            rand::thread_rng().gen::<u64>()
+        )
+        .as_str(),
+    )
+    .unwrap();
     let stats = Stats::new(id, Box::new(logger), CONFIG.stats_log_duration);
     let mut node = Node::new(id, Box::new(esp_channel), stats);
 
