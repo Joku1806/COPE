@@ -22,41 +22,43 @@ def main():
         print(f"Error: Directory '{directory}' does not exist.")
         return
 
-    # for root, _, files in os.walk(directory):
-    #     for file in files:
-    #         csv_file = os.path.join(root, file)
-    #         try:
-    #             df = DataReader([csv_file]).read()
-    #             plotter = Plotter(
-    #                 df,
-    #                 "results",
-    #                 f"Node {strip_name(file)}",
-    #                 interactive=True,
-    #                 set_figure_title=True,
-    #             )
+    # NOTE: This will not work for all data sources.
+    # If you don't want to crash, comment out this entire for loop for esp_MAC csvs.
+    for root, _, files in os.walk(directory):
+        for file in files:
+            csv_file = os.path.join(root, file)
+            try:
+                df = DataReader([csv_file]).read()
+                plotter = Plotter(
+                    df,
+                    "results",
+                    f"Node {strip_name(file)}",
+                    interactive=True,
+                    set_figure_title=True,
+                )
 
-    #             plotter.plot_rx_throughput_over_time()
-    #             plotter.plot_tx_throughput_over_time()
-    #             plotter.plot_percent_decoded_over_time()
-    #         except FileNotFoundError:
-    #             print(f"Error: File '{csv_file}' not found.")
-    #         except pd.errors.EmptyDataError:
-    #             print(
-    #                 f"Error: File '{csv_file}' is empty or not in the expected CSV format."
-    #             )
-    #         except:
-    #             continue
+                plotter.plot_rx_throughput_over_time()
+                plotter.plot_tx_throughput_over_time()
+                plotter.plot_percent_decoded_over_time()
+            except FileNotFoundError:
+                print(f"Error: File '{csv_file}' not found.")
+            except pd.errors.EmptyDataError:
+                print(
+                    f"Error: File '{csv_file}' is empty or not in the expected CSV format."
+                )
+            except:
+                continue
 
-    #     joined_paths = [os.path.join(root, f) for f in files]
-    #     df = DataReader(joined_paths).read()
-    #     plotter = Plotter(
-    #         df,
-    #         "results",
-    #         f"All Nodes",
-    #         interactive=True,
-    #         set_figure_title=True,
-    #     )
-    #     plotter.plot_rx_tx_barchart()
+        joined_paths = [os.path.join(root, f) for f in files]
+        df = DataReader(joined_paths).read()
+        plotter = Plotter(
+            df,
+            "results",
+            f"All Nodes",
+            interactive=True,
+            set_figure_title=True,
+        )
+        plotter.plot_rx_tx_barchart()
 
     all_paths = [
         os.path.join(dp, f)
@@ -66,10 +68,15 @@ def main():
     coding_paths = [
         p
         for p in all_paths
-        if not "esp" in p and not "nocoding" in p and not ".toml" in p
+        if not "esp" in p
+        and not "nocoding" in p
+        and not ".toml" in p
+        and not ".txt" in p
     ]
     nocoding_paths = [
-        p for p in all_paths if not "esp" in p and "nocoding" in p and not ".toml" in p
+        p
+        for p in all_paths
+        if not "esp" in p and "nocoding" in p and not ".toml" in p and not ".txt" in p
     ]
 
     df_coding = DataReader(coding_paths).read()
@@ -84,6 +91,7 @@ def main():
 
     plotter.plot_coding_gain_by_target_throughput(df_coding, df_nocoding)
     plotter.plot_percent_decoded_by_target_throughput(df_coding)
+    plotter.plot_target_throughput_vs_achieved_throughput(df_coding, df_nocoding)
 
 
 if __name__ == "__main__":

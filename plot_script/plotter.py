@@ -64,6 +64,9 @@ class Plotter:
     def target_throughput_extract_kB(v) -> float:
         return int(v[v.find("(") + 1 : v.find(")")]) / 1000
 
+    def kB_formatter() -> Callable:
+        return FuncFormatter(lambda v, _: f"{v / 1000.0:g}")
+
     def plot_rx_throughput_over_time(self):
         fig, ax = plt.subplots()
 
@@ -137,7 +140,10 @@ class Plotter:
     def plot_coding_gain_by_target_throughput(self, coding_df, nocoding_df):
         tgs_coding = coding_df["traffic_generator"].unique()
         tgs_nocoding = nocoding_df["traffic_generator"].unique()
-        tgs = sorted(list(set(tgs_coding) & set(tgs_nocoding) - set(["None"])))
+        tgs = sorted(
+            list(set(tgs_coding) & set(tgs_nocoding) - set(["None"])),
+            key=Plotter.target_throughput_extract_kB,
+        )
 
         coding_gains = []
         for tg in tgs:
@@ -171,7 +177,13 @@ class Plotter:
         self.post_function(f"coding_gain_by_target_throughput_{self.label}")
 
     def plot_percent_decoded_by_target_throughput(self, coding_df):
-        tgs = sorted(coding_df["traffic_generator"].unique())
+        tgs = list(coding_df["traffic_generator"].unique())
+        if "None" in tgs:
+            tgs.remove("None")
+        tgs = sorted(
+            tgs,
+            key=Plotter.target_throughput_extract_kB,
+        )
         if "None" in tgs:
             tgs.remove("None")
 
@@ -201,6 +213,49 @@ class Plotter:
         ax.yaxis.set_major_formatter(Plotter.percent_formatter())
 
         self.post_function(f"percent_decoded_by_target_throughput_{self.label}")
+
+    def plot_target_throughput_vs_achieved_throughput(self, coding_df, nocoding_df):
+        tgs_coding = coding_df["traffic_generator"].unique()
+        tgs_nocoding = nocoding_df["traffic_generator"].unique()
+        tgs = sorted(
+            list(set(tgs_coding) & set(tgs_nocoding) - set(["None"])),
+            key=Plotter.target_throughput_extract_kB,
+        )
+
+        achieved_coding = []
+        achieved_nocoding = []
+        for tg in tgs:
+            slice_coding = coding_df[coding_df["traffic_generator"] == tg]
+            slice_nocoding = nocoding_df[nocoding_df["traffic_generator"] == tg]
+
+            throughput_coding = (
+                slice_coding["data_sent"].sum()
+                / slice_coding["time_us"].max().total_seconds()
+            )
+            throughput_nocoding = (
+                slice_nocoding["data_sent"].sum()
+                / slice_nocoding["time_us"].max().total_seconds()
+            )
+
+            achieved_coding.append(throughput_coding)
+            achieved_nocoding.append(throughput_nocoding)
+
+        fig, ax = plt.subplots()
+
+        ax.plot(tgs, achieved_coding, linestyle="--", marker="o", label="Coding")
+        ax.plot(tgs, achieved_nocoding, linestyle="--", marker="o", label="No Coding")
+        ax.set_xlabel("Target Throughput [kB]")
+        ax.set_ylabel("Total Achieved Throughput [kB]")
+
+        # NOTE: matplotlib does not allow str arguments for FuncFormatter for some reason,
+        # so we have to use this workaround.
+        xlabels = [f"{Plotter.target_throughput_extract_kB(v):g}" for v in tgs]
+        ax.set_xticklabels(xlabels)
+        ax.yaxis.set_major_formatter(Plotter.kB_formatter())
+
+        ax.legend()
+
+        self.post_function(f"target_throughput_vs_achieved_throughput_{self.label}")
 
     # FIXME: This does not work correctly at all, needs to be fixed
     # I think we just have to combine all stored files inside the
